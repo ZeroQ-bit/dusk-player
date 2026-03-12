@@ -18,15 +18,15 @@ final class AVPlayerEngine: PlaybackEngine {
 
     // MARK: - AVPlayer
 
-    private let player = AVPlayer()
-    private let playerLayer = AVPlayerLayer()
+    @ObservationIgnored nonisolated(unsafe) private let player = AVPlayer()
+    @ObservationIgnored nonisolated(unsafe) private let playerLayer = AVPlayerLayer()
 
     // MARK: - Observers
 
-    private var timeObserver: Any?
-    private var statusObserver: NSKeyValueObservation?
-    private var timeControlStatusObserver: NSKeyValueObservation?
-    private var playbackEndedObserver: NSObjectProtocol?
+    @ObservationIgnored nonisolated(unsafe) private var timeObserver: Any?
+    @ObservationIgnored nonisolated(unsafe) private var statusObserver: NSKeyValueObservation?
+    @ObservationIgnored nonisolated(unsafe) private var timeControlStatusObserver: NSKeyValueObservation?
+    @ObservationIgnored nonisolated(unsafe) private var playbackEndedObserver: NSObjectProtocol?
 
     // MARK: - Track Mapping
 
