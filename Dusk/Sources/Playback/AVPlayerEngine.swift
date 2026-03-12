@@ -49,8 +49,14 @@ final class AVPlayerEngine: PlaybackEngine {
     }
 
     deinit {
-        removeTimeObserver()
-        removePlaybackEndedObserver()
+        if let observer = timeObserver {
+            player.removeTimeObserver(observer)
+            timeObserver = nil
+        }
+        if let playbackEndedObserver {
+            NotificationCenter.default.removeObserver(playbackEndedObserver)
+            self.playbackEndedObserver = nil
+        }
     }
 
     // MARK: - Lifecycle
