@@ -63,7 +63,10 @@ struct HomeView: View {
 
                     // Hub carousels (Task A) — Recently Added, etc.
                     ForEach(vm.hubs) { hub in
-                        let items = vm.inlineItems(in: hub)
+                        let items = vm.inlineItems(
+                            in: hub,
+                            maxRecentlyAddedItems: recentlyAddedInlineItemLimit
+                        )
                         if !items.isEmpty {
                             hubSection(hub, items: items, vm: vm)
                         }
@@ -162,7 +165,10 @@ struct HomeView: View {
     private func hubSection(_ hub: PlexHub, items: [PlexItem], vm: HomeViewModel) -> some View {
         let imageWidth = 130
         let imageHeight = 195
-        let showsShowAll = vm.shouldShowAll(for: hub)
+        let showsShowAll = vm.shouldShowAll(
+            for: hub,
+            maxRecentlyAddedItems: recentlyAddedInlineItemLimit
+        )
 
         MediaCarousel(
             title: hub.title,
@@ -250,6 +256,14 @@ struct HomeView: View {
         UIDevice.current.userInterfaceIdiom == .phone
         #else
         false
+        #endif
+    }
+
+    private var recentlyAddedInlineItemLimit: Int {
+        #if os(iOS)
+        UIDevice.current.userInterfaceIdiom == .pad ? 15 : 10
+        #else
+        10
         #endif
     }
 

@@ -2,8 +2,6 @@ import Foundation
 
 @MainActor @Observable
 final class HomeViewModel {
-    private let maxInlineRecentlyAddedItems = 10
-
     private(set) var hubs: [PlexHub] = []
     private(set) var continueWatching: [PlexItem] = []
     private(set) var isLoading = false
@@ -77,20 +75,20 @@ final class HomeViewModel {
         hub.items.filter { !shouldHideHomeItem($0) }
     }
 
-    func inlineItems(in hub: PlexHub) -> [PlexItem] {
+    func inlineItems(in hub: PlexHub, maxRecentlyAddedItems: Int) -> [PlexItem] {
         let items = visibleItems(in: hub)
 
         guard isRecentlyAddedHub(hub) else { return items }
-        return Array(items.prefix(maxInlineRecentlyAddedItems))
+        return Array(items.prefix(maxRecentlyAddedItems))
     }
 
-    func shouldShowAll(for hub: PlexHub) -> Bool {
+    func shouldShowAll(for hub: PlexHub, maxRecentlyAddedItems: Int) -> Bool {
         guard isRecentlyAddedHub(hub), hub.key != nil else { return false }
 
         let visibleCount = visibleItems(in: hub).count
-        return visibleCount > maxInlineRecentlyAddedItems ||
+        return visibleCount > maxRecentlyAddedItems ||
             hub.more == true ||
-            (hub.size ?? 0) > maxInlineRecentlyAddedItems
+            (hub.size ?? 0) > maxRecentlyAddedItems
     }
 
     func isRecentlyAddedHub(_ hub: PlexHub) -> Bool {
