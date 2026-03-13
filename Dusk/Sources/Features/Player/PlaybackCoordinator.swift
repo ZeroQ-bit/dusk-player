@@ -33,6 +33,9 @@ final class PlaybackCoordinator {
     /// Changes whenever the active playback item changes so PlayerView rebuilds.
     private(set) var playerPresentationID = UUID()
 
+    /// State for the post-playback Up Next interstitial between TV episodes.
+    private(set) var upNextPresentation: UpNextPresentation?
+
     // MARK: - Private
 
     private let plexService: PlexService
@@ -48,6 +51,7 @@ final class PlaybackCoordinator {
     private var lastReportedDurationMs = 0
 
     @ObservationIgnored nonisolated(unsafe) private var timelineTimer: Timer?
+    @ObservationIgnored nonisolated(unsafe) private var upNextCountdownTask: Task<Void, Never>?
 
     // MARK: - Init
 
@@ -73,6 +77,7 @@ final class PlaybackCoordinator {
     /// Called when the full-screen player cover is dismissed.
     /// Sends a final "stopped" timeline, scrobbles if needed, and tears down.
     func onPlayerDismissed() {
+        cancelUpNextCountdown()
         finalizeCurrentPlaybackSession(markCompleted: false)
         clearPlayerState()
         showPlayer = false
@@ -132,6 +137,8 @@ final class PlaybackCoordinator {
     @discardableResult
     private func startPlaybackSession(ratingKey: String, presentPlayer: Bool) async -> Bool {
         loadError = nil
+        cancelUpNextCountdown()
+        upNextPresentation = nil
 
         do {
             let details = try await plexService.getMediaDetails(ratingKey: ratingKey)
@@ -201,19 +208,12 @@ final class PlaybackCoordinator {
         isHandlingPlaybackEnded = true
         defer { isHandlingPlaybackEnded = false }
 
-        if preferences.continuousPlayEnabled,
-           let activeItemDetails,
+        if let activeItemDetails,
+           activeItemDetails.type == .episode,
            let nextEpisode = try? await plexService.getNextEpisode(after: activeItemDetails) {
             finalizeCurrentPlaybackSession(markCompleted: true)
-
-            let didStartNextEpisode = await startPlaybackSession(
-                ratingKey: nextEpisode.ratingKey,
-                presentPlayer: false
-            )
-
-            if didStartNextEpisode {
-                return
-            }
+            presentUpNext(for: nextEpisode)
+            return
         }
 
         finalizeCurrentPlaybackSession(markCompleted: true)
@@ -274,6 +274,8 @@ final class PlaybackCoordinator {
     private func clearPlayerState() {
         timelineTimer?.invalidate()
         timelineTimer = nil
+        cancelUpNextCountdown()
+        upNextPresentation = nil
         engine?.onPlaybackEnded = nil
         engine = nil
         activeItemDetails = nil
@@ -285,6 +287,91 @@ final class PlaybackCoordinator {
         isHandlingPlaybackEnded = false
         lastReportedTimeMs = 0
         lastReportedDurationMs = 0
+    }
+
+    func playUpNextNow() {
+        Task { @MainActor in
+            await startUpNextPlayback()
+        }
+    }
+
+    func cancelUpNextAutoplay() {
+        guard var upNextPresentation else { return }
+        cancelUpNextCountdown()
+        upNextPresentation.shouldAutoplay = false
+        upNextPresentation.secondsRemaining = nil
+        self.upNextPresentation = upNextPresentation
+    }
+
+    private func presentUpNext(for episode: PlexEpisode) {
+        cancelUpNextCountdown()
+
+        upNextPresentation = UpNextPresentation(
+            episode: episode,
+            shouldAutoplay: preferences.continuousPlayEnabled,
+            countdownDuration: preferences.continuousPlayCountdown.rawValue,
+            secondsRemaining: preferences.continuousPlayEnabled ? preferences.continuousPlayCountdown.rawValue : nil
+        )
+
+        if preferences.continuousPlayEnabled {
+            startUpNextCountdown()
+        }
+    }
+
+    private func startUpNextCountdown() {
+        guard let presentation = upNextPresentation,
+              presentation.shouldAutoplay else { return }
+
+        cancelUpNextCountdown()
+
+        upNextCountdownTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            for remaining in stride(from: presentation.countdownDuration, through: 1, by: -1) {
+                if Task.isCancelled { return }
+
+                guard var current = self.upNextPresentation,
+                      current.shouldAutoplay else { return }
+                current.secondsRemaining = remaining
+                self.upNextPresentation = current
+
+                do {
+                    try await Task.sleep(for: .seconds(1))
+                } catch {
+                    return
+                }
+            }
+
+            if Task.isCancelled { return }
+            await self.startUpNextPlayback()
+        }
+    }
+
+    private func cancelUpNextCountdown() {
+        upNextCountdownTask?.cancel()
+        upNextCountdownTask = nil
+    }
+
+    private func startUpNextPlayback() async {
+        guard var presentation = upNextPresentation,
+              !presentation.isStarting else { return }
+
+        cancelUpNextCountdown()
+        presentation.isStarting = true
+        presentation.errorMessage = nil
+        upNextPresentation = presentation
+
+        let nextRatingKey = presentation.episode.ratingKey
+        let didStart = await startPlaybackSession(ratingKey: nextRatingKey, presentPlayer: false)
+        if didStart { return }
+
+        guard var failedPresentation = upNextPresentation else { return }
+        failedPresentation.isStarting = false
+        failedPresentation.shouldAutoplay = false
+        failedPresentation.secondsRemaining = nil
+        failedPresentation.errorMessage = loadError ?? "Could not start the next episode."
+        upNextPresentation = failedPresentation
+        loadError = nil
     }
 }
 
@@ -398,4 +485,21 @@ struct PlaybackDebugInfo: Sendable {
 
 enum PlaybackDecision: Sendable {
     case directPlay
+}
+
+struct UpNextPresentation: Sendable {
+    let episode: PlexEpisode
+    var shouldAutoplay: Bool
+    let countdownDuration: Int
+    var secondsRemaining: Int?
+    var isStarting = false
+    var errorMessage: String?
+
+    var autoplayProgress: Double? {
+        guard shouldAutoplay,
+              countdownDuration > 0,
+              let secondsRemaining else { return nil }
+        let elapsed = countdownDuration - secondsRemaining
+        return min(max(Double(elapsed) / Double(countdownDuration), 0), 1)
+    }
 }

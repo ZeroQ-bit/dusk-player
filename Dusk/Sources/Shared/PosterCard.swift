@@ -124,3 +124,91 @@ struct PosterCard: View {
         .frame(width: width, alignment: .topLeading)
     }
 }
+
+struct PlexItemContextMenuContent: View {
+    let item: PlexItem
+    var onMarkWatched: (() -> Void)?
+    var onMarkUnwatched: (() -> Void)?
+    var detailsRoute: AppNavigationRoute? = nil
+    var detailsLabel: String = "View Details"
+
+    var body: some View {
+        if item.canMarkWatchedFromContextMenu, let onMarkWatched {
+            Button(action: onMarkWatched) {
+                Label("Mark Watched", systemImage: "eye")
+            }
+        }
+
+        if item.canMarkUnwatchedFromContextMenu, let onMarkUnwatched {
+            Button(action: onMarkUnwatched) {
+                Label("Mark Unwatched", systemImage: "eye.slash")
+            }
+        }
+
+        if let detailsRoute {
+            NavigationLink(value: detailsRoute) {
+                Label(detailsLabel, systemImage: "info.circle")
+            }
+        }
+
+        if let seasonRoute = item.contextMenuSeasonRoute {
+            NavigationLink(value: seasonRoute) {
+                Label("Go to Season", systemImage: "rectangle.stack")
+            }
+        }
+
+        if let showRoute = item.contextMenuShowRoute {
+            NavigationLink(value: showRoute) {
+                Label("Go to Show", systemImage: "tv")
+            }
+        }
+    }
+}
+
+private extension PlexItem {
+    var canMarkWatchedFromContextMenu: Bool {
+        switch type {
+        case .movie, .episode, .clip:
+            return !isWatched
+        case .show, .season:
+            if let leafCount, leafCount > 0, let viewedLeafCount {
+                return viewedLeafCount < leafCount
+            }
+            return !isWatched
+        default:
+            return false
+        }
+    }
+
+    var canMarkUnwatchedFromContextMenu: Bool {
+        switch type {
+        case .movie, .episode, .clip:
+            return isWatched || isPartiallyWatched
+        case .show, .season:
+            if let viewedLeafCount {
+                return viewedLeafCount > 0
+            }
+            return isWatched || isPartiallyWatched
+        default:
+            return false
+        }
+    }
+
+    var contextMenuSeasonRoute: AppNavigationRoute? {
+        guard type == .episode, let parentRatingKey else { return nil }
+        return .media(type: .season, ratingKey: parentRatingKey)
+    }
+
+    var contextMenuShowRoute: AppNavigationRoute? {
+        switch type {
+        case .episode:
+            guard let grandparentRatingKey else { return nil }
+            return .media(type: .show, ratingKey: grandparentRatingKey)
+        case .season:
+            guard let parentRatingKey else { return nil }
+            return .media(type: .show, ratingKey: parentRatingKey)
+        default:
+            return nil
+        }
+    }
+}

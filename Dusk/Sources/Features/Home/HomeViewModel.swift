@@ -32,6 +32,19 @@ final class HomeViewModel {
         isLoading = false
     }
 
+    func setWatched(_ watched: Bool, for item: PlexItem) async {
+        do {
+            if watched {
+                try await plexService.scrobble(ratingKey: item.ratingKey)
+            } else {
+                try await plexService.unscrobble(ratingKey: item.ratingKey)
+            }
+            await load()
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
     /// Resolve the best poster URL for an item.
     func posterURL(for item: PlexItem, width: Int, height: Int) -> URL? {
         plexService.imageURL(for: item.preferredPosterPath, width: width, height: height)
@@ -154,6 +167,10 @@ final class HomeHubItemsViewModel {
 
     func loadItems() async {
         guard items.isEmpty else { return }
+        await reloadItems()
+    }
+
+    func reloadItems() async {
         isLoading = true
         error = nil
 
@@ -166,6 +183,19 @@ final class HomeHubItemsViewModel {
         }
 
         isLoading = false
+    }
+
+    func setWatched(_ watched: Bool, for item: PlexItem) async {
+        do {
+            if watched {
+                try await plexService.scrobble(ratingKey: item.ratingKey)
+            } else {
+                try await plexService.unscrobble(ratingKey: item.ratingKey)
+            }
+            await reloadItems()
+        } catch {
+            self.error = error.localizedDescription
+        }
     }
 
     func posterURL(for item: PlexItem, width: Int, height: Int) -> URL? {

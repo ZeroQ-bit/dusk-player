@@ -1,5 +1,8 @@
 import SwiftUI
 import UIKit
+#if os(iOS)
+import AVFoundation
+#endif
 
 enum AppImageCache {
     static let memoryCapacity = 0
@@ -35,6 +38,7 @@ struct DuskApp: App {
         _playbackCoordinator = State(initialValue: PlaybackCoordinator(plexService: service, preferences: prefs))
         _userPreferences = State(initialValue: prefs)
         #if os(iOS)
+        Self.configurePlaybackAudioSession()
         Self.configureTabBarAppearance()
         #endif
     }
@@ -56,6 +60,16 @@ struct DuskApp: App {
 
 #if os(iOS)
 private extension DuskApp {
+    static func configurePlaybackAudioSession() {
+        let audioSession = AVAudioSession.sharedInstance()
+
+        do {
+            try audioSession.setCategory(.playback, mode: .moviePlayback, policy: .longFormVideo)
+        } catch {
+            assertionFailure("Failed to configure playback audio session: \(error.localizedDescription)")
+        }
+    }
+
     static func configureTabBarAppearance() {
         let itemAppearance = UITabBarItemAppearance()
         itemAppearance.normal.iconColor = .duskTextSecondary

@@ -15,11 +15,13 @@ final class AVPlayerEngine: PlaybackEngine {
     private(set) var error: PlaybackError?
     private(set) var availableSubtitleTracks: [SubtitleTrack] = []
     private(set) var availableAudioTracks: [AudioTrack] = []
+    private(set) var selectedSubtitleTrackID: Int?
+    private(set) var selectedAudioTrackID: Int?
     var onPlaybackEnded: (@MainActor () -> Void)?
 
     // MARK: - AVPlayer
 
-    @ObservationIgnored nonisolated(unsafe) private let player = AVPlayer()
+    @ObservationIgnored private let player = AVPlayer()
     @ObservationIgnored nonisolated(unsafe) private let playerLayer = AVPlayerLayer()
 
     // MARK: - Observers
@@ -77,6 +79,8 @@ final class AVPlayerEngine: PlaybackEngine {
         subtitleOptionsByID = [:]
         audioGroup = nil
         subtitleGroup = nil
+        selectedAudioTrackID = nil
+        selectedSubtitleTrackID = nil
         pendingStartPosition = startPosition
         hasReportedPlaybackEnded = false
 
@@ -111,6 +115,8 @@ final class AVPlayerEngine: PlaybackEngine {
         subtitleOptionsByID = [:]
         audioGroup = nil
         subtitleGroup = nil
+        selectedAudioTrackID = nil
+        selectedSubtitleTrackID = nil
         hasReportedPlaybackEnded = false
     }
 
@@ -125,9 +131,11 @@ final class AVPlayerEngine: PlaybackEngine {
         guard let item = player.currentItem, let group = subtitleGroup else { return }
         if let track, let option = subtitleOptionsByID[track.id] {
             item.select(option, in: group)
+            selectedSubtitleTrackID = track.id
         } else {
             // nil disables subtitles
             item.select(nil, in: group)
+            selectedSubtitleTrackID = nil
         }
     }
 
@@ -136,6 +144,7 @@ final class AVPlayerEngine: PlaybackEngine {
               let group = audioGroup,
               let option = audioOptionsByID[track.id] else { return }
         item.select(option, in: group)
+        selectedAudioTrackID = track.id
     }
 
     // MARK: - Rendering
@@ -298,6 +307,9 @@ final class AVPlayerEngine: PlaybackEngine {
                 ))
                 audioOptionsByID[i] = option
             }
+            if let selectedOption = item.currentMediaSelection.selectedMediaOption(in: group) {
+                selectedAudioTrackID = audioOptionsByID.first { $0.value === selectedOption }?.key
+            }
         }
 
         // Subtitle tracks via AVMediaSelectionGroup
@@ -318,6 +330,11 @@ final class AVPlayerEngine: PlaybackEngine {
                     externalURL: nil
                 ))
                 subtitleOptionsByID[i] = option
+            }
+            if let selectedOption = item.currentMediaSelection.selectedMediaOption(in: group) {
+                selectedSubtitleTrackID = subtitleOptionsByID.first { $0.value === selectedOption }?.key
+            } else {
+                selectedSubtitleTrackID = nil
             }
         }
     }

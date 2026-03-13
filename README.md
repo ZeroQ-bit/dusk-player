@@ -13,34 +13,38 @@ A native Swift/SwiftUI Plex client for Apple platforms.
 - [x] Library browsing
 - [x] Search
 - [x] Movie & TV show detail views
-- [ ] Subtitle & audio track selection
+- [x] Subtitle & audio track selection
 - [x] Continuous Playback
 - [ ] App Store Release
 - [ ] tvOS App
 - [x] Skip Intro & Credits
 - [ ] Chapter Markers
 - [ ] Select which version to play
-- [ ] Picture in Picture
+- [x] Picture in Picture
 - [ ] Passout Protection (Are you still watching?)
 - [ ] macOS App
 - [ ] Transcoding Support
 - [ ] Offline playback (Downloads)
 - [ ] Plex Home Integration
 
+** Maybe? **
+- [ ] Jellyfin Support
+
 ## Setup
 
 ```bash
-# 1. Download MobileVLCKit into Frameworks/
-mkdir -p Frameworks && cd Frameworks
-curl -L -o MobileVLCKit.tar.xz "https://download.videolan.org/pub/cocoapods/prod/MobileVLCKit-3.7.2-3e42ae47-79128878.tar.xz"
-tar xf MobileVLCKit.tar.xz && rm MobileVLCKit.tar.xz
-mv MobileVLCKit-binary/MobileVLCKit.xcframework .
-mv MobileVLCKit-binary/COPYING.txt VLCKit-LICENSE.txt
-rm -rf MobileVLCKit-binary
-cd ..
+# 1. Generate the Xcode project if needed
+brew install xcodegen  # if not already installed
+xcodegen generate
 
 # 2. Open in Xcode
 open Dusk.xcodeproj
+```
+
+The repository now vendors `Frameworks/VLCKit.xcframework` directly. To refresh that binary manually, run:
+
+```bash
+./ci_scripts/install_vlckit.sh
 ```
 
 ## License

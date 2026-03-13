@@ -8,7 +8,7 @@ This is **Dusk**, a native Swift/SwiftUI Plex client for Apple platforms. See `S
 - **Plex is the source of truth**: App is stateless beyond auth token (Keychain) and user preferences (UserDefaults). All metadata, watch state, and library data is fetched from Plex.
 - **No premature abstraction**: No `MediaProvider` protocol. Plex-specific code is fine. Keep it in `PlexService` but don't abstract until a second backend exists.
 - **SwiftUI, multi-platform**: iOS/iPadOS now, tvOS soon. Share as much UI as possible, use `#if os(tvOS)` for platform differences. macOS later via Catalyst.
-- **VLCKit is vendored**: No CocoaPods. Prebuilt xcframework, linked as dynamic framework for LGPL compliance.
+- **VLCKit is vendored**: No CocoaPods. A pinned `VLCKit.xcframework` is checked into `Frameworks/` and linked dynamically for LGPL compliance.
 - **Direct play only (v1)**: No transcoding. Fail with a clear error if the file can't be played.
 
 ## Code Style
@@ -20,24 +20,21 @@ This is **Dusk**, a native Swift/SwiftUI Plex client for Apple platforms. See `S
 
 ## Project Setup
 
-The Xcode project is generated via [xcodegen](https://github.com/yonaskolb/XcodeGen). The `project.yml` is the source of truth — `Dusk.xcodeproj` is gitignored.
+The Xcode project is generated via [xcodegen](https://github.com/yonaskolb/XcodeGen). `project.yml` remains the source of truth; regenerate `Dusk.xcodeproj` when project settings change.
 
 ```bash
 # 1. Generate the Xcode project
 brew install xcodegen  # if not already installed
 xcodegen generate
 
-# 2. Download MobileVLCKit 3.7.2 into Frameworks/
-mkdir -p Frameworks && cd Frameworks
-curl -L -o MobileVLCKit.tar.xz "https://download.videolan.org/pub/cocoapods/prod/MobileVLCKit-3.7.2-3e42ae47-79128878.tar.xz"
-xz -d MobileVLCKit.tar.xz && tar xf MobileVLCKit.tar && rm MobileVLCKit.tar
-mv MobileVLCKit-binary/MobileVLCKit.xcframework .
-mv MobileVLCKit-binary/COPYING.txt VLCKit-LICENSE.txt
-rm -rf MobileVLCKit-binary
-cd ..
-
-# 3. Open in Xcode
+# 2. Open in Xcode
 open Dusk.xcodeproj
+```
+
+To refresh the vendored VLCKit binary manually, run:
+
+```bash
+./ci_scripts/install_vlckit.sh
 ```
 
 ## Reference Points

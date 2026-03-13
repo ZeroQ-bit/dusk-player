@@ -5,6 +5,7 @@ import UIKit
 
 struct HomeView: View {
     @Environment(PlexService.self) private var plexService
+    @Environment(PlaybackCoordinator.self) private var playback
     @Binding var path: NavigationPath
     @State private var viewModel: HomeViewModel?
 
@@ -88,7 +89,9 @@ struct HomeView: View {
             ForEach(vm.continueWatching) { item in
                 #if os(tvOS)
                 VStack(alignment: .leading, spacing: 6) {
-                    NavigationLink(value: AppNavigationRoute.destination(for: item)) {
+                    Button {
+                        play(item)
+                    } label: {
                         PosterArtwork(
                             imageURL: vm.landscapeImageURL(for: item, width: imageWidth, height: imageHeight),
                             progress: vm.progress(for: item),
@@ -106,8 +109,23 @@ struct HomeView: View {
                     )
                 }
                 .frame(width: continueWatchingCardWidth, alignment: .topLeading)
+                .contextMenu {
+                    PlexItemContextMenuContent(
+                        item: item,
+                        onMarkWatched: {
+                            Task { await vm.setWatched(true, for: item) }
+                        },
+                        onMarkUnwatched: {
+                            Task { await vm.setWatched(false, for: item) }
+                        },
+                        detailsRoute: AppNavigationRoute.destination(for: item),
+                        detailsLabel: detailsLabel(for: item)
+                    )
+                }
                 #else
-                NavigationLink(value: AppNavigationRoute.destination(for: item)) {
+                Button {
+                    play(item)
+                } label: {
                     PosterCard(
                         imageURL: vm.landscapeImageURL(for: item, width: imageWidth, height: imageHeight),
                         title: vm.displayTitle(for: item),
@@ -119,6 +137,19 @@ struct HomeView: View {
                 }
                 .buttonStyle(.plain)
                 .duskSuppressTVOSButtonChrome()
+                .contextMenu {
+                    PlexItemContextMenuContent(
+                        item: item,
+                        onMarkWatched: {
+                            Task { await vm.setWatched(true, for: item) }
+                        },
+                        onMarkUnwatched: {
+                            Task { await vm.setWatched(false, for: item) }
+                        },
+                        detailsRoute: AppNavigationRoute.destination(for: item),
+                        detailsLabel: detailsLabel(for: item)
+                    )
+                }
                 #endif
             }
         }
@@ -166,6 +197,17 @@ struct HomeView: View {
                     )
                 }
                 .frame(width: 130, alignment: .topLeading)
+                .contextMenu {
+                    PlexItemContextMenuContent(
+                        item: item,
+                        onMarkWatched: {
+                            Task { await vm.setWatched(true, for: item) }
+                        },
+                        onMarkUnwatched: {
+                            Task { await vm.setWatched(false, for: item) }
+                        }
+                    )
+                }
                 #else
                 NavigationLink(value: AppNavigationRoute.destination(for: item)) {
                     PosterCard(
@@ -176,6 +218,17 @@ struct HomeView: View {
                 }
                 .buttonStyle(.plain)
                 .duskSuppressTVOSButtonChrome()
+                .contextMenu {
+                    PlexItemContextMenuContent(
+                        item: item,
+                        onMarkWatched: {
+                            Task { await vm.setWatched(true, for: item) }
+                        },
+                        onMarkUnwatched: {
+                            Task { await vm.setWatched(false, for: item) }
+                        }
+                    )
+                }
                 #endif
             }
         }
@@ -216,6 +269,23 @@ struct HomeView: View {
         #else
         false
         #endif
+    }
+
+    private func play(_ item: PlexItem) {
+        Task {
+            await playback.play(ratingKey: item.ratingKey)
+        }
+    }
+
+    private func detailsLabel(for item: PlexItem) -> String {
+        switch item.type {
+        case .episode:
+            "Go to Episode"
+        case .movie:
+            "Go to Movie"
+        default:
+            "View Details"
+        }
     }
 }
 
@@ -285,6 +355,17 @@ struct HomeHubItemsView: View {
                             )
                         }
                         .frame(width: layout.posterWidth, alignment: .topLeading)
+                        .contextMenu {
+                            PlexItemContextMenuContent(
+                                item: item,
+                                onMarkWatched: {
+                                    Task { await viewModel.setWatched(true, for: item) }
+                                },
+                                onMarkUnwatched: {
+                                    Task { await viewModel.setWatched(false, for: item) }
+                                }
+                            )
+                        }
                         #else
                         NavigationLink(value: AppNavigationRoute.destination(for: item)) {
                             PosterCard(
@@ -298,6 +379,17 @@ struct HomeHubItemsView: View {
                         }
                         .buttonStyle(.plain)
                         .duskSuppressTVOSButtonChrome()
+                        .contextMenu {
+                            PlexItemContextMenuContent(
+                                item: item,
+                                onMarkWatched: {
+                                    Task { await viewModel.setWatched(true, for: item) }
+                                },
+                                onMarkUnwatched: {
+                                    Task { await viewModel.setWatched(false, for: item) }
+                                }
+                            )
+                        }
                         #endif
                     }
                 }

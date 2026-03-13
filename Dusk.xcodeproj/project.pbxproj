@@ -60,7 +60,7 @@
 		8127F4D4447EBB68AFBE68B3 /* LibrariesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4EC987E87318E2BFA93ADA0 /* LibrariesViewModel.swift */; };
 		88EBDA8BD30C023D2FE3D5EA /* PlexMediaType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86559A01E84EC686EBEEDECB /* PlexMediaType.swift */; };
 		8B58F17B03B0655F1DB24A37 /* UserPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67267CA57BCFF55726919B4D /* UserPreferences.swift */; };
-		8DA07452B06EF7B90CAE1984 /* MobileVLCKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 95F9E42CD3371CAA984F60B3 /* MobileVLCKit.xcframework */; };
+		8DA07452B06EF7B90CAE1984 /* VLCKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 95F9E42CD3371CAA984F60B3 /* VLCKit.xcframework */; };
 		91C30FBA614B5BEF68A8DB61 /* MediaCarousel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E84406C8C1C0E18B6BD4D32 /* MediaCarousel.swift */; };
 		94795F75B488C797EFEE1E93 /* PlaybackCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A8C5D8503032DFB2DDEC895 /* PlaybackCoordinator.swift */; };
 		9A040BA241B84235CDC9630E /* PlaybackError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4308451DD3CE3F9FBEE84EA7 /* PlaybackError.swift */; };
@@ -95,7 +95,7 @@
 		D3547B3596D70D4C1CA2AAD5 /* PlaybackCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A8C5D8503032DFB2DDEC895 /* PlaybackCoordinator.swift */; };
 		D7FB0B3ABA76D5483CA40A26 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09AC36CE538549470497AF52 /* SettingsView.swift */; };
 		D86DC926C0D965156A52029C /* ServerPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 124D4F0CD015D34571A61801 /* ServerPickerView.swift */; };
-		DAB1283F9031389FAF60E807 /* MobileVLCKit.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 95F9E42CD3371CAA984F60B3 /* MobileVLCKit.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		DAB1283F9031389FAF60E807 /* VLCKit.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 95F9E42CD3371CAA984F60B3 /* VLCKit.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		E56F8EA27538C2A446B729E4 /* PlexSeason.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93D7902D253875230F093358 /* PlexSeason.swift */; };
 		E78EB2C60D0F5056A10C2996 /* MovieDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADD418AFDBF7E708D7555CFD /* MovieDetailView.swift */; };
 		E82BEC767616D9DD1B35031C /* PlaybackError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4308451DD3CE3F9FBEE84EA7 /* PlaybackError.swift */; };
@@ -117,7 +117,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
-				DAB1283F9031389FAF60E807 /* MobileVLCKit.xcframework in Embed Frameworks */,
+				DAB1283F9031389FAF60E807 /* VLCKit.xcframework in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -154,7 +154,7 @@
 		888D6327978234F944C7B711 /* AVPlayerEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AVPlayerEngine.swift; sourceTree = "<group>"; };
 		88E0CEE228B108E654D2D3FD /* ShowDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShowDetailView.swift; sourceTree = "<group>"; };
 		93D7902D253875230F093358 /* PlexSeason.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlexSeason.swift; sourceTree = "<group>"; };
-		95F9E42CD3371CAA984F60B3 /* MobileVLCKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = MobileVLCKit.xcframework; path = Frameworks/MobileVLCKit.xcframework; sourceTree = "<group>"; };
+		95F9E42CD3371CAA984F60B3 /* VLCKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = VLCKit.xcframework; path = Frameworks/VLCKit.xcframework; sourceTree = "<group>"; };
 		9A5D35CEE6AC31BD13C6A72D /* PlaybackEngineFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackEngineFactory.swift; sourceTree = "<group>"; };
 		9A8C5D8503032DFB2DDEC895 /* PlaybackCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackCoordinator.swift; sourceTree = "<group>"; };
 		A3658E173CAB9A21489A636A /* Dusk-tvOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; name = "Dusk-tvOS.app"; path = Dusk.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -185,7 +185,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				8DA07452B06EF7B90CAE1984 /* MobileVLCKit.xcframework in Frameworks */,
+				8DA07452B06EF7B90CAE1984 /* VLCKit.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -266,7 +266,7 @@
 		4A07890AB8FCD02F4F809977 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				95F9E42CD3371CAA984F60B3 /* MobileVLCKit.xcframework */,
+				95F9E42CD3371CAA984F60B3 /* VLCKit.xcframework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";

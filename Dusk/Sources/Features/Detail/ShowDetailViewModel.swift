@@ -54,7 +54,7 @@ final class ShowDetailViewModel {
     }
 
     func backdropURL(width: Int, height: Int) -> URL? {
-        plexService.imageURL(for: details?.art, width: width, height: height)
+        plexService.imageURL(for: details?.art)
     }
 
     func posterURL(width: Int, height: Int) -> URL? {
@@ -131,8 +131,14 @@ final class SeasonDetailViewModel {
         return "\(count) Episode\(count == 1 ? "" : "s")"
     }
 
+    var watchedEpisodeCountText: String? {
+        let viewedCount = details?.viewedLeafCount ?? episodes.filter(\.isWatched).count
+        guard viewedCount > 0 else { return nil }
+        return "\(viewedCount) watched"
+    }
+
     func backdropURL(width: Int, height: Int) -> URL? {
-        plexService.imageURL(for: details?.art, width: width, height: height)
+        plexService.imageURL(for: details?.art)
     }
 
     func posterURL(width: Int, height: Int) -> URL? {
@@ -150,15 +156,20 @@ final class SeasonDetailViewModel {
     func episodeSubtitle(_ episode: PlexEpisode) -> String? {
         var parts: [String] = []
 
-        if let label = episodeLabel(for: episode) {
-            parts.append(label)
-        }
-
         if let duration = formattedDuration(for: episode) {
             parts.append(duration)
         }
 
+        if let originallyAvailableAt = episode.originallyAvailableAt, !originallyAvailableAt.isEmpty {
+            parts.append(originallyAvailableAt)
+        }
+
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    func episodeLabel(_ episode: PlexEpisode) -> String? {
+        guard let index = episode.index else { return nil }
+        return "Episode \(index)"
     }
 
     func progress(for episode: PlexEpisode) -> Double? {
@@ -167,17 +178,6 @@ final class SeasonDetailViewModel {
               duration > 0,
               offset > 0 else { return nil }
         return Double(offset) / Double(duration)
-    }
-
-    private func episodeLabel(for episode: PlexEpisode) -> String? {
-        switch (episode.parentIndex, episode.index) {
-        case let (season?, index?):
-            return "S\(String(format: "%02d", season))E\(String(format: "%02d", index))"
-        case let (_, index?):
-            return "Episode \(index)"
-        default:
-            return nil
-        }
     }
 
     private func formattedDuration(for episode: PlexEpisode) -> String? {
@@ -256,7 +256,7 @@ final class EpisodeDetailViewModel {
     }
 
     func backdropURL(width: Int, height: Int) -> URL? {
-        plexService.imageURL(for: details?.thumb ?? details?.art, width: width, height: height)
+        plexService.imageURL(for: details?.thumb ?? details?.art)
     }
 
     func posterURL(width: Int, height: Int) -> URL? {

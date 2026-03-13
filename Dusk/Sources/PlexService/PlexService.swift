@@ -373,13 +373,14 @@ final class PlexService {
     // MARK: - Image URLs
 
     /// Construct a full image URL from a relative Plex image path (thumb, art, etc.).
-    /// When a target size is provided, prefer Plex's photo transcoder so the server
-    /// returns an image close to the on-screen size instead of the original asset.
+    /// Sizes are expressed in layout points and converted to pixel dimensions using the
+    /// current display scale before asking Plex for a transcoded image.
     func imageURL(for path: String?, width: Int? = nil, height: Int? = nil) -> URL? {
         guard let path else { return nil }
 
-        if let width, width > 0 || (height ?? 0) > 0,
-           let transcodedURL = transcodedImageURL(for: path, width: width, height: height) {
+        let requestSize = imageRequestSize(width: width, height: height)
+        if requestSize.hasDimensions,
+           let transcodedURL = transcodedImageURL(for: path, size: requestSize) {
             return transcodedURL
         }
 
@@ -415,7 +416,7 @@ extension PlexService {
         return URL(string: urlString)
     }
 
-    private func transcodedImageURL(for path: String, width: Int, height: Int?) -> URL? {
+    private func transcodedImageURL(for path: String, size: ImageRequestSize) -> URL? {
         guard let baseURL = serverBaseURL,
               let originalURLString = imageRequestURLString(for: path, includeToken: true) else {
             return nil
@@ -429,13 +430,13 @@ extension PlexService {
         }
 
         var items = [
-            URLQueryItem(name: "width", value: String(max(width, 1))),
+            URLQueryItem(name: "width", value: String(max(size.width ?? 1, 1))),
             URLQueryItem(name: "minSize", value: "1"),
             URLQueryItem(name: "upscale", value: "0"),
             URLQueryItem(name: "url", value: originalURLString),
         ]
 
-        if let height, height > 0 {
+        if let height = size.height {
             items.append(URLQueryItem(name: "height", value: String(height)))
         }
 
@@ -465,6 +466,35 @@ extension PlexService {
         }
 
         return components.url?.absoluteString
+    }
+
+    private func imageRequestSize(width: Int?, height: Int?) -> ImageRequestSize {
+        ImageRequestSize(
+            width: scaledImageDimension(width),
+            height: scaledImageDimension(height)
+        )
+    }
+
+    private func scaledImageDimension(_ dimension: Int?) -> Int? {
+        guard let dimension, dimension > 0 else { return nil }
+        return Int(ceil(Double(dimension) * Double(displayScale)))
+    }
+
+    private var displayScale: CGFloat {
+        #if canImport(UIKit)
+        UIScreen.main.scale
+        #else
+        1
+        #endif
+    }
+
+    private struct ImageRequestSize {
+        let width: Int?
+        let height: Int?
+
+        var hasDimensions: Bool {
+            width != nil || height != nil
+        }
     }
 
     /// Plex-specific headers sent with every request.

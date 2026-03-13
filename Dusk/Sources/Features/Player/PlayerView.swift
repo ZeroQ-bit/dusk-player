@@ -5,6 +5,8 @@ import SwiftUI
 /// Present via `.fullScreenCover`. Playback starts on first appearance so the
 /// underlying render surface is attached before the engine begins loading.
 struct PlayerView: View {
+    @Environment(PlexService.self) private var plexService
+    @Environment(PlaybackCoordinator.self) private var playback
     @Environment(UserPreferences.self) private var preferences
     @State private var viewModel: PlayerViewModel
     @Environment(\.dismiss) private var dismiss
@@ -31,6 +33,7 @@ struct PlayerView: View {
 
     var body: some View {
         @Bindable var vm = viewModel
+        let upNextPresentation = playback.upNextPresentation
 
         ZStack {
             // Black letterbox behind video
@@ -40,40 +43,46 @@ struct PlayerView: View {
             viewModel.engineView
                 .ignoresSafeArea()
 
-            interactionOverlay
-
-            // Buffering spinner
-            if viewModel.shouldShowBufferingIndicator {
-                ProgressView()
-                    .scaleEffect(1.5)
-                    .tint(.white)
-            }
-
-            // Error overlay
-            if let error = viewModel.playbackError {
-                errorOverlay(error)
-            }
-
-            if preferences.playerDebugOverlayEnabled,
-               let debugInfo,
-               viewModel.playbackError == nil {
-                debugOverlay(debugInfo)
-            }
-
-            if let marker = viewModel.activeSkipMarker,
-               viewModel.playbackError == nil {
-                skipMarkerOverlay(marker)
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
-            }
-
-            // Controls overlay
-            if viewModel.showControls, viewModel.playbackError == nil {
-                controlsOverlay
+            if let upNextPresentation {
+                upNextOverlay(upNextPresentation)
                     .transition(.opacity)
+            } else {
+                interactionOverlay
+
+                // Buffering spinner
+                if viewModel.shouldShowBufferingIndicator {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                        .tint(.white)
+                }
+
+                // Error overlay
+                if let error = viewModel.playbackError {
+                    errorOverlay(error)
+                }
+
+                if preferences.playerDebugOverlayEnabled,
+                   let debugInfo,
+                   viewModel.playbackError == nil {
+                    debugOverlay(debugInfo)
+                }
+
+                if let marker = viewModel.activeSkipMarker,
+                   viewModel.playbackError == nil {
+                    skipMarkerOverlay(marker)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
+
+                // Controls overlay
+                if viewModel.showControls, viewModel.playbackError == nil {
+                    controlsOverlay
+                        .transition(.opacity)
+                }
             }
         }
         .animation(.easeInOut(duration: 0.25), value: viewModel.showControls)
         .animation(.easeInOut(duration: 0.2), value: viewModel.activeSkipMarker?.id)
+        .animation(.easeInOut(duration: 0.25), value: upNextPresentation?.episode.ratingKey)
         .duskStatusBarHidden()
         .persistentSystemOverlays(.hidden)
         .onAppear {
@@ -135,34 +144,38 @@ struct PlayerView: View {
     // MARK: - Controls Overlay
 
     private var controlsOverlay: some View {
-        ZStack {
-            // Gradient scrim (extends behind safe area)
-            VStack(spacing: 0) {
-                LinearGradient(
-                    colors: [.black.opacity(0.7), .clear],
-                    startPoint: .top, endPoint: .bottom
-                )
-                .frame(height: 120)
+        GeometryReader { geometry in
+            let showsTrackLabels = geometry.size.width > geometry.size.height
 
-                Spacer()
+            ZStack {
+                // Gradient scrim (extends behind safe area)
+                VStack(spacing: 0) {
+                    LinearGradient(
+                        colors: [.black.opacity(0.7), .clear],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                    .frame(height: 120)
 
-                LinearGradient(
-                    colors: [.clear, .black.opacity(0.7)],
-                    startPoint: .top, endPoint: .bottom
-                )
-                .frame(height: 160)
+                    Spacer()
+
+                    LinearGradient(
+                        colors: [.clear, .black.opacity(0.7)],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                    .frame(height: 160)
+                }
+                .ignoresSafeArea()
+
+                // Actual controls (respect safe area)
+                VStack {
+                    topBar
+                    Spacer()
+                    centerControls
+                    Spacer()
+                    bottomBar(showsTrackLabels: showsTrackLabels)
+                }
+                .padding()
             }
-            .ignoresSafeArea()
-
-            // Actual controls (respect safe area)
-            VStack {
-                topBar
-                Spacer()
-                centerControls
-                Spacer()
-                bottomBar
-            }
-            .padding()
         }
     }
 
@@ -346,6 +359,340 @@ struct PlayerView: View {
         let subtitle: String?
     }
 
+    // MARK: - Up Next
+
+    private func upNextOverlay(_ presentation: UpNextPresentation) -> some View {
+        GeometryReader { geometry in
+            let metrics = UpNextLayoutMetrics.make(for: geometry)
+
+            ZStack {
+                upNextBackground
+
+                upNextPanel(presentation, metrics: metrics)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                    .padding(.horizontal, metrics.outerPadding)
+                    .padding(.top, max(geometry.safeAreaInsets.top + 16, 20))
+                    .padding(.bottom, max(geometry.safeAreaInsets.bottom + 16, 20))
+            }
+        }
+        .ignoresSafeArea()
+    }
+
+    private var upNextBackground: some View {
+        ZStack {
+            Color.black
+
+            LinearGradient(
+                colors: [
+                    Color.duskSurface.opacity(0.28),
+                    Color.black.opacity(0.88),
+                    Color.black,
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            RadialGradient(
+                colors: [
+                    Color.duskAccent.opacity(0.18),
+                    Color.clear,
+                ],
+                center: .topLeading,
+                startRadius: 20,
+                endRadius: 520
+            )
+        }
+        .ignoresSafeArea()
+    }
+
+    private func upNextPanel(_ presentation: UpNextPresentation, metrics: UpNextLayoutMetrics) -> some View {
+        VStack(alignment: .leading, spacing: metrics.sectionSpacing) {
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("UP NEXT")
+                        .font(.caption.weight(.semibold))
+                        .tracking(1.2)
+                        .foregroundStyle(Color.duskAccent)
+
+                    if let showTitle = presentation.episode.grandparentTitle {
+                        Text(showTitle)
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.9))
+                            .lineLimit(1)
+                    }
+                }
+
+                Spacer(minLength: 0)
+
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 36, height: 36)
+                        .background(.white.opacity(0.08), in: Circle())
+                }
+                .duskSuppressTVOSButtonChrome()
+                .duskTVOSFocusEffectShape(Circle())
+            }
+
+            if metrics.usesVerticalLayout {
+                VStack(alignment: .leading, spacing: metrics.sectionSpacing) {
+                    upNextPreviewCard(presentation, metrics: metrics)
+                    upNextDetails(presentation, metrics: metrics)
+                }
+            } else {
+                HStack(alignment: .top, spacing: metrics.contentSpacing) {
+                    upNextPreviewCard(presentation, metrics: metrics)
+                    upNextDetails(presentation, metrics: metrics)
+                }
+            }
+        }
+        .padding(metrics.panelPadding)
+        .frame(width: metrics.panelWidth, height: metrics.panelHeight, alignment: .topLeading)
+    }
+
+    private func upNextPreviewCard(_ presentation: UpNextPresentation, metrics: UpNextLayoutMetrics) -> some View {
+        let thumbnailURL = upNextThumbnailURL(for: presentation)
+
+        return ZStack(alignment: .bottomLeading) {
+            if let thumbnailURL {
+                AsyncImage(url: thumbnailURL) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    default:
+                        Color.duskSurface
+                    }
+                }
+            } else {
+                Color.duskSurface
+            }
+
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.72)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            VStack(alignment: .leading, spacing: 4) {
+                if let subtitle = upNextEpisodeContext(for: presentation.episode) {
+                    Text(subtitle)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.9))
+                        .lineLimit(1)
+                }
+            }
+            .padding(12)
+
+            Button {
+                playback.playUpNextNow()
+            } label: {
+                ZStack {
+                    Circle()
+                        .fill(.ultraThinMaterial)
+                        .overlay {
+                            Circle()
+                                .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
+                        }
+                        .frame(width: metrics.playButtonSize, height: metrics.playButtonSize)
+
+                    if presentation.isStarting {
+                        ProgressView()
+                            .tint(.white)
+                    } else {
+                        Image(systemName: "play.fill")
+                            .font(.system(size: metrics.playIconSize, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .offset(x: 2)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            }
+            .disabled(presentation.isStarting)
+            .duskSuppressTVOSButtonChrome()
+            .duskTVOSFocusEffectShape(Circle())
+        }
+        .frame(width: metrics.previewWidth, height: metrics.previewHeight)
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(0.24), radius: 18, y: 10)
+    }
+
+    private func upNextDetails(_ presentation: UpNextPresentation, metrics: UpNextLayoutMetrics) -> some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text(presentation.episode.title)
+                .font(metrics.titleFont)
+                .foregroundStyle(.white)
+                .lineLimit(metrics.titleLineLimit)
+
+            if let metadata = upNextMetadata(for: presentation.episode) {
+                Text(metadata)
+                    .font(.subheadline.monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.74))
+                    .lineLimit(1)
+            }
+
+            if presentation.shouldAutoplay,
+               let countdownLabel = upNextCountdownLabel(for: presentation) {
+                upNextCountdownCard(label: countdownLabel, progress: presentation.autoplayProgress)
+            } else {
+                Text("Playback finished. Select the next episode when you're ready.")
+                    .font(.body)
+                    .foregroundStyle(.white.opacity(0.78))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let summary = presentation.episode.summary,
+               !summary.isEmpty {
+                Text(summary)
+                    .font(.body)
+                    .foregroundStyle(.white.opacity(0.86))
+                    .lineSpacing(4)
+                    .lineLimit(metrics.summaryLineLimit)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let errorMessage = presentation.errorMessage {
+                Text(errorMessage)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Color.duskAccent)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func upNextCountdownCard(label: String, progress: Double?) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: "play.circle.fill")
+                    .font(.headline)
+                    .foregroundStyle(Color.duskAccent)
+
+                Text(label)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.white)
+            }
+
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.white.opacity(0.14))
+
+                    Capsule()
+                        .fill(Color.duskAccent)
+                        .frame(width: geometry.size.width * max(0, min(progress ?? 0, 1)))
+                        .animation(.linear(duration: 1), value: progress ?? 0)
+                }
+            }
+            .frame(height: 6)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+        }
+    }
+
+    private func upNextThumbnailURL(for presentation: UpNextPresentation) -> URL? {
+        plexService.imageURL(
+            for: presentation.episode.thumb ?? presentation.episode.art ?? presentation.episode.grandparentThumb,
+            width: 1280,
+            height: 720
+        )
+    }
+
+    private func upNextMetadata(for episode: PlexEpisode) -> String? {
+        let parts = [
+            upNextEpisodeContext(for: episode),
+            formattedDuration(milliseconds: episode.duration),
+        ].compactMap { $0 }
+
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private func upNextEpisodeContext(for episode: PlexEpisode) -> String? {
+        switch (episode.parentIndex, episode.index) {
+        case let (season?, episode?):
+            return "Season \(season) · Episode \(episode)"
+        case let (season?, nil):
+            return "Season \(season)"
+        case let (nil, episode?):
+            return "Episode \(episode)"
+        default:
+            return nil
+        }
+    }
+
+    private func upNextCountdownLabel(for presentation: UpNextPresentation) -> String? {
+        guard let secondsRemaining = presentation.secondsRemaining else { return nil }
+        return "Continues in \(secondsRemaining)s"
+    }
+
+    private func formattedDuration(milliseconds: Int?) -> String? {
+        guard let milliseconds, milliseconds > 0 else { return nil }
+        let totalMinutes = milliseconds / 60_000
+        return "\(totalMinutes) min"
+    }
+
+    private struct UpNextLayoutMetrics {
+        let outerPadding: CGFloat
+        let panelWidth: CGFloat
+        let panelHeight: CGFloat
+        let panelPadding: CGFloat
+        let contentSpacing: CGFloat
+        let sectionSpacing: CGFloat
+        let previewWidth: CGFloat
+        let previewHeight: CGFloat
+        let usesVerticalLayout: Bool
+        let titleFont: Font
+        let titleLineLimit: Int
+        let summaryLineLimit: Int
+        let playButtonSize: CGFloat
+        let playIconSize: CGFloat
+
+        static func make(for geometry: GeometryProxy) -> Self {
+            let size = geometry.size
+            let outerPadding: CGFloat = size.width < 500 ? 16 : 28
+            let safeHeight = size.height - geometry.safeAreaInsets.top - geometry.safeAreaInsets.bottom - 40
+            let panelWidth = min(size.width - outerPadding * 2, size.width < 500 ? 680 : 860)
+            let panelHeight = min(size.width < 500 ? 340 : 400, safeHeight)
+            let panelPadding: CGFloat = size.width < 500 ? 18 : 24
+            let contentSpacing: CGFloat = size.width < 500 ? 16 : 24
+            let sectionSpacing: CGFloat = size.width < 500 ? 16 : 20
+            let previewWidth = min(max(panelWidth * (size.width < 500 ? 0.3 : 0.28), 112), size.width < 500 ? 136 : 220)
+            let previewHeight = previewWidth * 9.0 / 16.0
+            let remainingWidth = panelWidth - (panelPadding * 2) - previewWidth - contentSpacing
+            let usesVerticalLayout = remainingWidth < 210
+
+            return Self(
+                outerPadding: outerPadding,
+                panelWidth: panelWidth,
+                panelHeight: panelHeight,
+                panelPadding: panelPadding,
+                contentSpacing: contentSpacing,
+                sectionSpacing: sectionSpacing,
+                previewWidth: previewWidth,
+                previewHeight: previewHeight,
+                usesVerticalLayout: usesVerticalLayout,
+                titleFont: size.width < 500 ? .title2.weight(.bold) : .largeTitle.weight(.bold),
+                titleLineLimit: size.width < 500 ? 2 : 3,
+                summaryLineLimit: size.width < 500 ? 3 : 4,
+                playButtonSize: size.width < 500 ? 54 : 64,
+                playIconSize: size.width < 500 ? 20 : 24
+            )
+        }
+    }
+
     // MARK: - Skip Marker Overlay
 
     private func skipMarkerOverlay(_ marker: PlexMarker) -> some View {
@@ -408,7 +755,7 @@ struct PlayerView: View {
 
     // MARK: - Bottom Bar
 
-    private var bottomBar: some View {
+    private func bottomBar(showsTrackLabels: Bool) -> some View {
         VStack(spacing: 8) {
             seekBar
 
@@ -427,25 +774,68 @@ struct PlayerView: View {
 
                 Spacer()
 
-                if !viewModel.subtitleTracks.isEmpty {
-                    Button { viewModel.showSubtitlePicker = true } label: {
-                        Image(systemName: "captions.bubble")
-                            .font(.body)
-                            .foregroundStyle(.white)
-                            .frame(width: 36, height: 36)
-                    }
+                Button { viewModel.showSubtitlePicker = true } label: {
+                    trackButtonLabel(
+                        icon: viewModel.selectedSubtitleTrack == nil
+                            ? "captions.bubble"
+                            : "captions.bubble.fill",
+                        title: subtitleControlTitle,
+                        showsTitle: showsTrackLabels,
+                        isEnabled: !viewModel.subtitleTracks.isEmpty
+                    )
                 }
+                .disabled(viewModel.subtitleTracks.isEmpty)
 
-                if !viewModel.audioTracks.isEmpty {
-                    Button { viewModel.showAudioPicker = true } label: {
-                        Image(systemName: "speaker.wave.2")
-                            .font(.body)
-                            .foregroundStyle(.white)
-                            .frame(width: 36, height: 36)
-                    }
+                Button { viewModel.showAudioPicker = true } label: {
+                    trackButtonLabel(
+                        icon: "speaker.wave.2",
+                        title: audioControlTitle,
+                        showsTitle: showsTrackLabels,
+                        isEnabled: !viewModel.audioTracks.isEmpty
+                    )
                 }
+                .disabled(viewModel.audioTracks.isEmpty)
             }
         }
+    }
+
+    private var subtitleControlTitle: String {
+        if let selectedSubtitleTrack = viewModel.selectedSubtitleTrack {
+            return selectedSubtitleTrack.displayTitle
+        }
+
+        return viewModel.state == .loading ? "..." : "-"
+    }
+
+    private var audioControlTitle: String {
+        if let selectedAudioTrack = viewModel.selectedAudioTrack {
+            return selectedAudioTrack.displayTitle
+        }
+
+        return viewModel.state == .loading ? "..." : "-"
+    }
+
+    private func trackButtonLabel(
+        icon: String,
+        title: String,
+        showsTitle: Bool,
+        isEnabled: Bool
+    ) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.body)
+
+            if showsTitle {
+                Text(title)
+                    .font(.caption.weight(.medium))
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .foregroundStyle(.white.opacity(isEnabled ? 1.0 : 0.72))
+        .padding(.horizontal, 10)
+        .frame(width: showsTitle ? 132 : 36, height: 36, alignment: .leading)
+        .background(.white.opacity(0.12), in: Capsule())
     }
 
     // MARK: - Seek Bar
@@ -542,8 +932,11 @@ struct PlayerView: View {
                 Button {
                     viewModel.selectSubtitle(nil)
                 } label: {
-                    Text("Off")
-                        .foregroundStyle(Color.duskTextPrimary)
+                    pickerRow(
+                        title: "Off",
+                        subtitle: nil,
+                        isSelected: viewModel.selectedSubtitleTrackID == nil
+                    )
                 }
                 .listRowBackground(Color.duskSurface)
                 .duskSuppressTVOSButtonChrome()
@@ -552,15 +945,11 @@ struct PlayerView: View {
                     Button {
                         viewModel.selectSubtitle(track)
                     } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(track.displayTitle)
-                                .foregroundStyle(Color.duskTextPrimary)
-                            if let lang = track.language {
-                                Text(lang)
-                                    .font(.caption)
-                                    .foregroundStyle(Color.duskTextSecondary)
-                            }
-                        }
+                        pickerRow(
+                            title: track.displayTitle,
+                            subtitle: track.language,
+                            isSelected: viewModel.selectedSubtitleTrackID == track.id
+                        )
                     }
                     .listRowBackground(Color.duskSurface)
                     .duskSuppressTVOSButtonChrome()
@@ -590,15 +979,11 @@ struct PlayerView: View {
                     Button {
                         viewModel.selectAudio(track)
                     } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(track.displayTitle)
-                                .foregroundStyle(Color.duskTextPrimary)
-                            if let lang = track.language {
-                                Text(lang)
-                                    .font(.caption)
-                                    .foregroundStyle(Color.duskTextSecondary)
-                            }
-                        }
+                        pickerRow(
+                            title: track.displayTitle,
+                            subtitle: track.language,
+                            isSelected: viewModel.selectedAudioTrackID == track.id
+                        )
                     }
                     .listRowBackground(Color.duskSurface)
                     .duskSuppressTVOSButtonChrome()
@@ -617,5 +1002,27 @@ struct PlayerView: View {
         }
         .presentationDetents([.medium])
         .presentationBackground(Color.duskBackground)
+    }
+
+    private func pickerRow(title: String, subtitle: String?, isSelected: Bool) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .foregroundStyle(Color.duskTextPrimary)
+                if let subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(Color.duskTextSecondary)
+                }
+            }
+
+            Spacer()
+
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color.duskAccent)
+            }
+        }
     }
 }

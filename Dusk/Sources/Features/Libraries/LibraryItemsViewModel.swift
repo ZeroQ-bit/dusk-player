@@ -21,6 +21,10 @@ final class LibraryItemsViewModel {
 
     func loadItems() async {
         guard items.isEmpty else { return }
+        await reloadItems()
+    }
+
+    func reloadItems() async {
         isLoading = true
         error = nil
         do {
@@ -35,6 +39,19 @@ final class LibraryItemsViewModel {
             self.error = error.localizedDescription
         }
         isLoading = false
+    }
+
+    func setWatched(_ watched: Bool, for item: PlexItem) async {
+        do {
+            if watched {
+                try await plexService.scrobble(ratingKey: item.ratingKey)
+            } else {
+                try await plexService.unscrobble(ratingKey: item.ratingKey)
+            }
+            await reloadItems()
+        } catch {
+            self.error = error.localizedDescription
+        }
     }
 
     func loadMoreIfNeeded(currentItem: PlexItem) async {

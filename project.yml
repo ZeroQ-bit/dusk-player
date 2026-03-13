@@ -38,7 +38,7 @@ targets:
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks"
         SWIFT_STRICT_CONCURRENCY: complete
     dependencies:
-      - framework: Frameworks/MobileVLCKit.xcframework
+      - framework: Frameworks/VLCKit.xcframework
         embed: true
 
   Dusk-tvOS:

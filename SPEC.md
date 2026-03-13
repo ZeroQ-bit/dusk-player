@@ -502,7 +502,7 @@ SwiftData chosen because: native SwiftUI integration, `@Query` for reactive view
 |---------|-------|------------|
 | tvOS support | P1 | Validate VLCKit tvOS build + focus UI |
 | macOS support | P2 | Mac Catalyst, minimal work expected |
-| Picture in Picture | P1-P2 | AVPlayer: native. VLCKit: needs AVSampleBufferDisplayLayer pipe. Design player view layer with this in mind |
+| Picture in Picture | P1-P2 | AVPlayer: native. VLCKit 4.x: native drawable-based PiP APIs on iOS. Automatic background entry still needs validation |
 | AirPlay | P2 | AVPlayer: native. VLCKit: needs investigation |
 | Transcoding fallback | P1 | Plex transcode session API, resolution/bitrate selection UI |
 | Offline / Downloads | P2 | Local storage, download manager, DRM considerations |
@@ -521,7 +521,7 @@ SwiftData chosen because: native SwiftUI integration, `@Query` for reactive view
 
 | Risk | Severity | Mitigation |
 |------|----------|------------|
-| VLCKit PiP requires AVSampleBufferDisplayLayer | Medium | Defer PiP to later phase. When implementing, pipe VLCKit decoded frames to AVSampleBufferDisplayLayer. Does not affect v1 |
+| Automatic VLCKit PiP may still require upstream tuning | Medium | Use VLCKit 4.x PiP drawable APIs first. If swipe-to-home behavior is inconsistent, patch or fork upstream rather than building a custom sample-buffer renderer |
 | VLCKit on tvOS build viability | Medium | Research agent dispatched. If VLCKit tvOS build fails, evaluate KSPlayer (LGPL paid) or server-side transcoding |
 | OpenGL ES deprecation on iOS | Low | VLCKit uses it, but Apple has kept it functional for 8+ years. Not an imminent risk. Watch for removal signals in future iOS betas |
 | LGPL compliance for App Store | Low | Ship VLCKit as dynamic xcframework, include attribution, provide source code offer. Well-trodden path (Infuse, nPlayer, VLC all do this) |
@@ -532,4 +532,4 @@ SwiftData chosen because: native SwiftUI integration, `@Query` for reactive view
 1. **App name: Dusk.** Repository: `dusk-player`. Plex client identifier: `com.dusk-player.app`. Product header: `Dusk`.
 2. **Plex Pass not required.** The app relies on direct play, library browsing, and timeline reporting, none of which require Plex Pass. If a Plex Pass-only feature becomes relevant later (e.g., hardware-accelerated transcoding on the server when we add transcoding fallback), handle it gracefully: detect the 401/403 response, show a clear message explaining the feature requires Plex Pass, and continue operating without it.
 3. **Image loading: AsyncImage + URLCache.** Configure a shared URLSession with a generous URLCache (200MB disk). Use AsyncImage throughout. No third-party image loading dependency (Kingfisher, Nuke, etc.). If performance becomes an issue with large grids, revisit with a lightweight prefetch layer before adding a dependency.
-4. **VLCKit integration: vendor the xcframework manually.** VLCKit 3.x has no official SPM support. The community SPM wrapper (tylerjonesio/vlckit-spm) pins to v3.5.1 and may lag behind updates. CocoaPods adds project complexity. The cleanest path: download the prebuilt VLCKit xcframework from VideoLAN's release artifacts, add it to the project as a vendored binary framework, and link it as a dynamic framework for LGPL compliance. This keeps the project pure SPM for everything else and gives full control over VLCKit versioning.
+4. **VLCKit integration: vendor the xcframework manually.** VLCKit still has no official SPM path that fits the app's needs, and CocoaPods adds project complexity. The current approach is to keep a pinned `Frameworks/VLCKit.xcframework` in the repository, link it dynamically for LGPL compliance, and refresh it manually with `./ci_scripts/install_vlckit.sh` when upstream needs to change. This keeps the project dependency model simple while preserving control over the exact VLCKit build and PiP-capable API surface.

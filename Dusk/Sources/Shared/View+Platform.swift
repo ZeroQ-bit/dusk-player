@@ -75,3 +75,39 @@ extension View {
         #endif
     }
 }
+
+struct DetailHeroBackdrop: View {
+    let imageURL: URL?
+    let height: CGFloat
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                Color.duskSurface
+
+                if let imageURL {
+                    AsyncImage(url: imageURL) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                .frame(
+                                    width: geometry.size.width,
+                                    height: geometry.size.height,
+                                    alignment: .center
+                                )
+                                .clipped()
+                        default:
+                            Color.clear
+                        }
+                    }
+                }
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .center)
+            .clipped()
+        }
+        .frame(height: height)
+        .frame(maxWidth: .infinity)
+    }
+}

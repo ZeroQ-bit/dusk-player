@@ -28,6 +28,12 @@ Carthage/Build/
 
 # VLCKit vendored framework (large binary)
 *.xcframework/
+!Frameworks/
+!Frameworks/VLCKit.xcframework/
+!Frameworks/VLCKit.xcframework/**
+Frameworks/VLCKit.xcframework/**/dSYMs/
+Frameworks/VLCKit.xcframework/**/dSYMs/**
+!Frameworks/VLCKit-LICENSE.txt
 
 # OS files
 .DS_Store

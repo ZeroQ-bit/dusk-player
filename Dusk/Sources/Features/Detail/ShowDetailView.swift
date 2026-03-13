@@ -82,25 +82,10 @@ struct ShowDetailView: View {
         let backdropHeight = Int(heroHeight.rounded(.up))
 
         ZStack(alignment: .bottomLeading) {
-            if let url = viewModel.backdropURL(width: backdropWidth, height: backdropHeight) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    default:
-                        Color.duskSurface
-                    }
-                }
-                .frame(height: heroHeight)
-                .frame(maxWidth: .infinity)
-                .clipped()
-            } else {
-                Color.duskSurface
-                    .frame(height: heroHeight)
-                    .frame(maxWidth: .infinity)
-            }
+            DetailHeroBackdrop(
+                imageURL: viewModel.backdropURL(width: backdropWidth, height: backdropHeight),
+                height: heroHeight
+            )
 
             LinearGradient(
                 colors: [.clear, Color.duskBackground.opacity(0.6), Color.duskBackground],
@@ -331,9 +316,6 @@ struct SeasonDetailView: View {
     @State private var viewModel: SeasonDetailViewModel
 
     private let horizontalPadding: CGFloat = 20
-    private let gridSpacing: CGFloat = 14
-    private let preferredCardWidth: CGFloat = 160
-    private let minimumColumnCount = 1
 
     init(ratingKey: String, plexService: PlexService) {
         _viewModel = State(initialValue: SeasonDetailViewModel(
@@ -369,7 +351,16 @@ struct SeasonDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     heroSection(details, topInset: geometry.safeAreaInsets.top, containerWidth: geometry.size.width)
+                    if let summary = details.summary, !summary.isEmpty {
+                        Text(summary)
+                            .font(.body)
+                            .foregroundStyle(Color.duskTextSecondary)
+                            .lineSpacing(4)
+                            .padding(.horizontal, horizontalPadding)
+                            .padding(.top, 20)
+                    }
                     episodesSection(width: geometry.size.width)
+                        .padding(.horizontal, horizontalPadding)
                         .padding(.top, 24)
                         .padding(.bottom, 40)
                 }
@@ -384,30 +375,15 @@ struct SeasonDetailView: View {
 
     @ViewBuilder
     private func heroSection(_ details: PlexMediaDetails, topInset: CGFloat, containerWidth: CGFloat) -> some View {
-        let heroHeight = 320 + topInset
+        let heroHeight = 340 + topInset
         let backdropWidth = Int(containerWidth.rounded(.up))
         let backdropHeight = Int(heroHeight.rounded(.up))
 
         ZStack(alignment: .bottomLeading) {
-            if let url = viewModel.backdropURL(width: backdropWidth, height: backdropHeight) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    default:
-                        Color.duskSurface
-                    }
-                }
-                .frame(height: heroHeight)
-                .frame(maxWidth: .infinity)
-                .clipped()
-            } else {
-                Color.duskSurface
-                    .frame(height: heroHeight)
-                    .frame(maxWidth: .infinity)
-            }
+            DetailHeroBackdrop(
+                imageURL: viewModel.backdropURL(width: backdropWidth, height: backdropHeight),
+                height: heroHeight
+            )
 
             LinearGradient(
                 colors: [.clear, Color.duskBackground.opacity(0.6), Color.duskBackground],
@@ -418,23 +394,7 @@ struct SeasonDetailView: View {
             .frame(maxWidth: .infinity)
 
             HStack(alignment: .bottom, spacing: 16) {
-                if let posterURL = viewModel.posterURL(width: 100, height: 150) {
-                    AsyncImage(url: posterURL) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .aspectRatio(2.0 / 3.0, contentMode: .fit)
-                        default:
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(Color.duskSurface)
-                                .aspectRatio(2.0 / 3.0, contentMode: .fit)
-                        }
-                    }
-                    .frame(width: 100)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                    .shadow(color: .black.opacity(0.4), radius: 12, y: 6)
-                }
+                seasonArtwork
 
                 VStack(alignment: .leading, spacing: 10) {
                     if let showTitle = viewModel.showTitle {
@@ -466,17 +426,18 @@ struct SeasonDetailView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, horizontalPadding)
-            .padding(.bottom, 16)
+                .padding(.horizontal, horizontalPadding)
+                .padding(.bottom, 16)
         }
         .frame(height: heroHeight)
+        .frame(maxWidth: .infinity)
     }
 
     @ViewBuilder
     private func metadataTagline(_ details: PlexMediaDetails) -> some View {
         let parts = [
             viewModel.episodeCountText,
+            viewModel.watchedEpisodeCountText,
             details.contentRating,
         ].compactMap { $0 }
 
@@ -490,71 +451,35 @@ struct SeasonDetailView: View {
     @ViewBuilder
     private func episodesSection(width: CGFloat) -> some View {
         if !viewModel.episodes.isEmpty {
-            let layout = gridLayout(for: width)
-            let imageWidth = Int(layout.cardWidth.rounded(.up))
-            let imageHeight = Int((layout.cardWidth / (16.0 / 9.0)).rounded(.up))
+            let contentWidth = max(width - (horizontalPadding * 2), 280)
+            let artworkWidth = min(max(contentWidth * 0.48, 170), 320)
+            let imageWidth = Int(artworkWidth.rounded(.up))
+            let imageHeight = Int((artworkWidth / (16.0 / 9.0)).rounded(.up))
 
             VStack(alignment: .leading, spacing: 16) {
                 Text("Episodes")
                     .font(.headline)
                     .foregroundStyle(Color.duskTextPrimary)
-                    .padding(.horizontal, horizontalPadding)
 
-                LazyVGrid(columns: layout.columns, alignment: .leading, spacing: 18) {
+                LazyVStack(spacing: 20) {
                     ForEach(viewModel.episodes) { episode in
-                        #if os(tvOS)
-                        VStack(alignment: .leading, spacing: 6) {
-                            NavigationLink(value: AppNavigationRoute.media(type: .episode, ratingKey: episode.ratingKey)) {
-                                PosterArtwork(
-                                    imageURL: viewModel.episodeImageURL(episode, width: imageWidth, height: imageHeight),
-                                    progress: viewModel.progress(for: episode),
-                                    width: layout.cardWidth,
-                                    imageAspectRatio: 16.0 / 9.0
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            .duskSuppressTVOSButtonChrome()
-
-                            PosterCardText(
-                                title: episode.title,
-                                subtitle: viewModel.episodeSubtitle(episode),
-                                width: layout.cardWidth
-                            )
-                        }
-                        .frame(width: layout.cardWidth, alignment: .topLeading)
-                        #else
                         NavigationLink(value: AppNavigationRoute.media(type: .episode, ratingKey: episode.ratingKey)) {
-                            PosterCard(
+                            SeasonEpisodeRow(
+                                episode: episode,
                                 imageURL: viewModel.episodeImageURL(episode, width: imageWidth, height: imageHeight),
-                                title: episode.title,
+                                label: viewModel.episodeLabel(episode),
                                 subtitle: viewModel.episodeSubtitle(episode),
                                 progress: viewModel.progress(for: episode),
-                                width: layout.cardWidth,
-                                imageAspectRatio: 16.0 / 9.0
+                                artworkWidth: artworkWidth
                             )
                         }
                         .buttonStyle(.plain)
                         .duskSuppressTVOSButtonChrome()
-                        #endif
+                        .duskTVOSFocusEffectShape(Rectangle())
                     }
                 }
-                .padding(.horizontal, horizontalPadding)
             }
         }
-    }
-
-    private func gridLayout(for containerWidth: CGFloat) -> (columns: [GridItem], cardWidth: CGFloat) {
-        let availableWidth = max(containerWidth - (horizontalPadding * 2), preferredCardWidth)
-        let rawColumnCount = Int((availableWidth + gridSpacing) / (preferredCardWidth + gridSpacing))
-        let columnCount = max(rawColumnCount, minimumColumnCount)
-        let totalSpacing = CGFloat(columnCount - 1) * gridSpacing
-        let cardWidth = floor((availableWidth - totalSpacing) / CGFloat(columnCount))
-        let columns = Array(
-            repeating: GridItem(.fixed(cardWidth), spacing: gridSpacing, alignment: .top),
-            count: columnCount
-        )
-
-        return (columns, cardWidth)
     }
 
     @ViewBuilder
@@ -573,6 +498,134 @@ struct SeasonDetailView: View {
             .foregroundStyle(Color.duskAccent)
             .duskSuppressTVOSButtonChrome()
         }
+    }
+
+    @ViewBuilder
+    private var seasonArtwork: some View {
+        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+
+        if let posterURL = viewModel.posterURL(width: 112, height: 168) {
+            AsyncImage(url: posterURL) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .aspectRatio(2.0 / 3.0, contentMode: .fit)
+                default:
+                    shape.fill(Color.duskBackground)
+                }
+            }
+            .frame(width: 112)
+            .aspectRatio(2.0 / 3.0, contentMode: .fit)
+            .clipShape(shape)
+        } else {
+            shape
+                .fill(Color.duskBackground)
+                .frame(width: 112)
+                .aspectRatio(2.0 / 3.0, contentMode: .fit)
+        }
+    }
+}
+
+private struct SeasonEpisodeRow: View {
+    let episode: PlexEpisode
+    let imageURL: URL?
+    let label: String?
+    let subtitle: String?
+    let progress: Double?
+    let artworkWidth: CGFloat
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 18) {
+                artwork
+
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        if let label, !label.isEmpty {
+                            Text(label)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Color.duskTextSecondary)
+                        }
+
+                        if episode.isWatched {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.caption)
+                                .foregroundStyle(Color.duskAccent)
+                        }
+                    }
+
+                    Text(episode.title)
+                        .font(.headline)
+                        .foregroundStyle(Color.duskTextPrimary)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if let subtitle, !subtitle.isEmpty {
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(Color.duskTextSecondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+
+            if let summary = episode.summary, !summary.isEmpty {
+                Text(summary)
+                    .font(.subheadline)
+                    .foregroundStyle(Color.duskTextSecondary)
+                    .lineSpacing(4)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Rectangle()
+                .fill(Color.white.opacity(0.08))
+                .frame(height: 1)
+        }
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private var artwork: some View {
+        ZStack(alignment: .bottomLeading) {
+            if let imageURL {
+                AsyncImage(url: imageURL) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(16.0 / 9.0, contentMode: .fill)
+                    default:
+                        Color.duskBackground
+                            .aspectRatio(16.0 / 9.0, contentMode: .fill)
+                    }
+                }
+            } else {
+                Color.duskBackground
+                    .aspectRatio(16.0 / 9.0, contentMode: .fill)
+            }
+
+            if let progress {
+                GeometryReader { geometry in
+                    VStack {
+                        Spacer()
+                        ZStack(alignment: .leading) {
+                            Rectangle()
+                                .fill(Color.white.opacity(0.2))
+                                .frame(height: 3)
+
+                            Rectangle()
+                                .fill(Color.duskAccent)
+                                .frame(width: geometry.size.width * progress, height: 3)
+                        }
+                    }
+                }
+            }
+        }
+        .frame(width: artworkWidth)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
 
@@ -629,6 +682,10 @@ struct EpisodeDetailView: View {
                             .padding(.horizontal, 20)
                             .padding(.top, 24)
                     }
+                    if let roles = details.roles, !roles.isEmpty {
+                        castSection(roles)
+                            .padding(.top, 24)
+                    }
                 }
                 .padding(.top, -geometry.safeAreaInsets.top)
                 .frame(width: geometry.size.width, alignment: .topLeading)
@@ -647,25 +704,10 @@ struct EpisodeDetailView: View {
         let backdropHeight = Int(heroHeight.rounded(.up))
 
         ZStack(alignment: .bottomLeading) {
-            if let url = viewModel.backdropURL(width: backdropWidth, height: backdropHeight) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    default:
-                        Color.duskSurface
-                    }
-                }
-                .frame(height: heroHeight)
-                .frame(maxWidth: .infinity)
-                .clipped()
-            } else {
-                Color.duskSurface
-                    .frame(height: heroHeight)
-                    .frame(maxWidth: .infinity)
-            }
+            DetailHeroBackdrop(
+                imageURL: viewModel.backdropURL(width: backdropWidth, height: backdropHeight),
+                height: heroHeight
+            )
 
             LinearGradient(
                 colors: [.clear, Color.duskBackground.opacity(0.6), Color.duskBackground],
@@ -855,6 +897,25 @@ struct EpisodeDetailView: View {
                 )
             }
             .duskSuppressTVOSButtonChrome()
+        }
+    }
+
+    @ViewBuilder
+    private func castSection(_ roles: [PlexRole]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Cast")
+                .font(.headline)
+                .foregroundStyle(Color.duskTextPrimary)
+                .padding(.horizontal, 20)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 12) {
+                    ForEach(Array(roles.prefix(20).enumerated()), id: \.offset) { _, role in
+                        ActorCreditCard(person: PlexPersonReference(role: role), plexService: plexService)
+                    }
+                }
+                .padding(.horizontal, 20)
+            }
         }
     }
 

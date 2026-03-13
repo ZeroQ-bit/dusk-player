@@ -68,6 +68,17 @@ struct LibraryItemsView: View {
                             )
                         }
                         .frame(width: layout.posterWidth, alignment: .topLeading)
+                        .contextMenu {
+                            PlexItemContextMenuContent(
+                                item: item,
+                                onMarkWatched: {
+                                    Task { await viewModel.setWatched(true, for: item) }
+                                },
+                                onMarkUnwatched: {
+                                    Task { await viewModel.setWatched(false, for: item) }
+                                }
+                            )
+                        }
                         .onAppear {
                             Task { await viewModel.loadMoreIfNeeded(currentItem: item) }
                         }
@@ -84,6 +95,17 @@ struct LibraryItemsView: View {
                         }
                         .buttonStyle(.plain)
                         .duskSuppressTVOSButtonChrome()
+                        .contextMenu {
+                            PlexItemContextMenuContent(
+                                item: item,
+                                onMarkWatched: {
+                                    Task { await viewModel.setWatched(true, for: item) }
+                                },
+                                onMarkUnwatched: {
+                                    Task { await viewModel.setWatched(false, for: item) }
+                                }
+                            )
+                        }
                         .onAppear {
                             Task { await viewModel.loadMoreIfNeeded(currentItem: item) }
                         }

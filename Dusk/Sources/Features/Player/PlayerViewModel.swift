@@ -16,6 +16,8 @@ final class PlayerViewModel {
     private(set) var playbackError: PlaybackError?
     private(set) var subtitleTracks: [SubtitleTrack] = []
     private(set) var audioTracks: [AudioTrack] = []
+    private(set) var selectedSubtitleTrackID: Int?
+    private(set) var selectedAudioTrackID: Int?
 
     // MARK: - UI State
 
@@ -155,12 +157,14 @@ final class PlayerViewModel {
     func selectSubtitle(_ track: SubtitleTrack?) {
         hasAppliedAutomaticSubtitleSelection = true
         engine.selectSubtitleTrack(track)
+        selectedSubtitleTrackID = track?.id
         showSubtitlePicker = false
     }
 
     func selectAudio(_ track: AudioTrack) {
         hasAppliedAutomaticAudioSelection = true
         engine.selectAudioTrack(track)
+        selectedAudioTrackID = track.id
         showAudioPicker = false
     }
 
@@ -214,6 +218,8 @@ final class PlayerViewModel {
     private func syncTrackLists() {
         audioTracks = mergeAudioMetadata(into: engine.availableAudioTracks)
         subtitleTracks = mergeSubtitleMetadata(into: engine.availableSubtitleTracks)
+        selectedAudioTrackID = resolvedSelectedAudioTrackID()
+        selectedSubtitleTrackID = resolvedSelectedSubtitleTrackID()
     }
 
     private func applyAutomaticTrackSelectionIfNeeded() {
@@ -222,12 +228,15 @@ final class PlayerViewModel {
         if !hasAppliedAutomaticAudioSelection, !audioTracks.isEmpty {
             if let preferredAudioTrack = preferredAudioTrack() {
                 engine.selectAudioTrack(preferredAudioTrack)
+                selectedAudioTrackID = preferredAudioTrack.id
             }
             hasAppliedAutomaticAudioSelection = true
         }
 
         if !hasAppliedAutomaticSubtitleSelection, !subtitleTracks.isEmpty {
-            engine.selectSubtitleTrack(preferredSubtitleTrack())
+            let preferredSubtitleTrack = preferredSubtitleTrack()
+            engine.selectSubtitleTrack(preferredSubtitleTrack)
+            selectedSubtitleTrackID = preferredSubtitleTrack?.id
             hasAppliedAutomaticSubtitleSelection = true
         }
     }
@@ -273,6 +282,60 @@ final class PlayerViewModel {
             .filter { Self.normalizedLanguageCode($0.languageCode) == preferredLanguage }
             .sorted(by: Self.subtitleOrdering(preferForcedTracks: preferForcedTracks))
             .first
+    }
+
+    private func resolvedSelectedAudioTrackID() -> Int? {
+        if let selectedTrackID = engine.selectedAudioTrackID,
+           audioTracks.contains(where: { $0.id == selectedTrackID }) {
+            return selectedTrackID
+        }
+
+        if let sourceStream = sourcePart?.streams.first(where: {
+            $0.streamType == .audio && ($0.isSelected ?? false)
+        }), let matchedTrack = bestMatchingAudioTrack(for: sourceStream) {
+            return matchedTrack.id
+        }
+
+        return audioTracks.first?.id
+    }
+
+    private func resolvedSelectedSubtitleTrackID() -> Int? {
+        if let selectedTrackID = engine.selectedSubtitleTrackID,
+           subtitleTracks.contains(where: { $0.id == selectedTrackID }) {
+            return selectedTrackID
+        }
+
+        if let sourceStream = sourcePart?.streams.first(where: {
+            $0.streamType == .subtitle && ($0.isSelected ?? false)
+        }), let matchedTrack = bestMatchingSubtitleTrack(for: sourceStream) {
+            return matchedTrack.id
+        }
+
+        return nil
+    }
+
+    private func bestMatchingAudioTrack(for stream: PlexStream) -> AudioTrack? {
+        bestMatchingTrack(in: audioTracks) { track in
+            scoreAudioMatch(track: track, stream: stream)
+        }
+    }
+
+    private func bestMatchingSubtitleTrack(for stream: PlexStream) -> SubtitleTrack? {
+        bestMatchingTrack(in: subtitleTracks) { track in
+            scoreSubtitleMatch(track: track, stream: stream)
+        }
+    }
+
+    private func bestMatchingTrack<Track>(
+        in tracks: [Track],
+        score: (Track) -> Int
+    ) -> Track? {
+        let best = tracks.max { lhs, rhs in
+            score(lhs) < score(rhs)
+        }
+
+        guard let best, score(best) > 0 else { return nil }
+        return best
     }
 
     private func mergeAudioMetadata(into engineTracks: [AudioTrack]) -> [AudioTrack] {
@@ -510,6 +573,14 @@ final class PlayerViewModel {
 
     var shouldShowBufferingIndicator: Bool {
         isBuffering && !hasStartedPlayback && playbackError == nil
+    }
+
+    var selectedAudioTrack: AudioTrack? {
+        audioTracks.first { $0.id == selectedAudioTrackID }
+    }
+
+    var selectedSubtitleTrack: SubtitleTrack? {
+        subtitleTracks.first { $0.id == selectedSubtitleTrackID }
     }
 
     var formattedTime: String {

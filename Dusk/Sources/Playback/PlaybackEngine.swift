@@ -36,6 +36,8 @@ protocol PlaybackEngine: AnyObject {
 
     var availableSubtitleTracks: [SubtitleTrack] { get }
     var availableAudioTracks: [AudioTrack] { get }
+    var selectedSubtitleTrackID: Int? { get }
+    var selectedAudioTrackID: Int? { get }
     func selectSubtitleTrack(_ track: SubtitleTrack?)
     func selectAudioTrack(_ track: AudioTrack)
 

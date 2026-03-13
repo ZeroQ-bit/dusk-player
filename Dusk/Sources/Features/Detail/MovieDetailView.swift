@@ -79,26 +79,10 @@ struct MovieDetailView: View {
         let backdropHeight = Int(heroHeight.rounded(.up))
 
         ZStack(alignment: .bottomLeading) {
-            // Backdrop
-            if let url = viewModel.backdropURL(width: backdropWidth, height: backdropHeight) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    default:
-                        Color.duskSurface
-                    }
-                }
-                .frame(height: heroHeight)
-                .frame(maxWidth: .infinity)
-                .clipped()
-            } else {
-                Color.duskSurface
-                    .frame(height: heroHeight)
-                    .frame(maxWidth: .infinity)
-            }
+            DetailHeroBackdrop(
+                imageURL: viewModel.backdropURL(width: backdropWidth, height: backdropHeight),
+                height: heroHeight
+            )
 
             // Gradient fade to background
             LinearGradient(

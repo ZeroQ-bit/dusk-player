@@ -17,6 +17,7 @@ final class UserPreferences {
         static let subtitleForcedOnly = "subtitleForcedOnly"
         static let defaultAudioLanguage = "defaultAudioLanguage"
         static let continuousPlayEnabled = "continuousPlayEnabled"
+        static let continuousPlayCountdown = "continuousPlayCountdown"
         static let playerDoubleTapSeekEnabled = "playerDoubleTapSeekEnabled"
         static let playerDoubleTapForwardInterval = "playerDoubleTapForwardInterval"
         static let playerDoubleTapBackwardInterval = "playerDoubleTapBackwardInterval"
@@ -50,6 +51,11 @@ final class UserPreferences {
     /// Automatically continue to the next episode when TV playback finishes.
     var continuousPlayEnabled: Bool {
         didSet { UserDefaults.standard.set(continuousPlayEnabled, forKey: Keys.continuousPlayEnabled) }
+    }
+
+    /// Delay before automatically starting the next episode from the Up Next screen.
+    var continuousPlayCountdown: ContinuousPlayCountdown {
+        didSet { UserDefaults.standard.set(continuousPlayCountdown.rawValue, forKey: Keys.continuousPlayCountdown) }
     }
 
     /// Enable left/right double-tap seeking on touch-based platforms.
@@ -114,6 +120,11 @@ final class UserPreferences {
         let subtitleForcedOnly = defaults.bool(forKey: Keys.subtitleForcedOnly)
         let defaultAudioLanguage = defaults.string(forKey: Keys.defaultAudioLanguage) ?? "en"
         let continuousPlayEnabled = defaults.object(forKey: Keys.continuousPlayEnabled) as? Bool ?? true
+        let continuousPlayCountdown = Self.storedContinuousPlayCountdown(
+            forKey: Keys.continuousPlayCountdown,
+            defaults: defaults,
+            fallback: .fiveSeconds
+        )
         let playerDoubleTapSeekEnabled = defaults.object(forKey: Keys.playerDoubleTapSeekEnabled) as? Bool ?? true
         let playerDoubleTapForwardInterval = Self.storedSeekInterval(
             forKey: Keys.playerDoubleTapForwardInterval,
@@ -144,6 +155,7 @@ final class UserPreferences {
         self.subtitleForcedOnly = subtitleForcedOnly
         self.defaultAudioLanguage = defaultAudioLanguage
         self.continuousPlayEnabled = continuousPlayEnabled
+        self.continuousPlayCountdown = continuousPlayCountdown
         self.playerDoubleTapSeekEnabled = playerDoubleTapSeekEnabled
         self.playerDoubleTapForwardInterval = playerDoubleTapForwardInterval
         self.playerDoubleTapBackwardInterval = playerDoubleTapBackwardInterval
@@ -160,6 +172,15 @@ final class UserPreferences {
     ) -> PlayerSeekInterval {
         guard defaults.object(forKey: key) != nil else { return fallback }
         return PlayerSeekInterval(rawValue: defaults.integer(forKey: key)) ?? fallback
+    }
+
+    private static func storedContinuousPlayCountdown(
+        forKey key: String,
+        defaults: UserDefaults,
+        fallback: ContinuousPlayCountdown
+    ) -> ContinuousPlayCountdown {
+        guard defaults.object(forKey: key) != nil else { return fallback }
+        return ContinuousPlayCountdown(rawValue: defaults.integer(forKey: key)) ?? fallback
     }
 }
 
@@ -194,6 +215,23 @@ enum PlayerSeekInterval: Int, CaseIterable, Identifiable {
     case thirtySeconds = 30
     case fortyFiveSeconds = 45
     case sixtySeconds = 60
+
+    var id: Int { rawValue }
+
+    var displayName: String {
+        "\(rawValue)s"
+    }
+
+    var timeInterval: TimeInterval {
+        TimeInterval(rawValue)
+    }
+}
+
+enum ContinuousPlayCountdown: Int, CaseIterable, Identifiable {
+    case threeSeconds = 3
+    case fiveSeconds = 5
+    case tenSeconds = 10
+    case fifteenSeconds = 15
 
     var id: Int { rawValue }
 

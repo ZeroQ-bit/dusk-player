@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Settings screen accessible from the Settings tab.
 ///
-/// Sections: Playback, Server, App (per SPEC.md §6.7).
+/// Sections are split into smaller semantic groups to keep related controls together.
 struct SettingsView: View {
     @Environment(PlexService.self) private var plexService
     @Environment(UserPreferences.self) private var preferences
@@ -43,9 +43,13 @@ struct SettingsView: View {
     @ViewBuilder
     private var iosSettingsContent: some View {
         List {
-            playbackSection
+            playbackDefaultsSection
+            playbackBehaviorSection
+            playbackAdvancedSection
             serverSection
-            appSection
+            appearanceSection
+            storageSection
+            aboutSection
             accountSection
         }
         .duskScrollContentBackgroundHidden()
@@ -55,9 +59,13 @@ struct SettingsView: View {
     private var tvSettingsContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 32) {
-                tvPlaybackSection
+                tvPlaybackDefaultsSection
+                tvPlaybackBehaviorSection
+                tvPlaybackAdvancedSection
                 tvServerSection
-                tvAppSection
+                tvAppearanceSection
+                tvStorageSection
+                tvAboutSection
                 tvAccountSection
             }
             .frame(maxWidth: 980, alignment: .leading)
@@ -70,11 +78,10 @@ struct SettingsView: View {
     // MARK: - Playback
 
     @ViewBuilder
-    private var playbackSection: some View {
+    private var playbackDefaultsSection: some View {
         @Bindable var preferences = preferences
 
         Section {
-            // Max Resolution
             Picker("Max Resolution", selection: $preferences.maxResolution) {
                 ForEach(MaxResolution.allCases) { resolution in
                     Text(resolution.displayName).tag(resolution)
@@ -89,17 +96,39 @@ struct SettingsView: View {
                 .foregroundStyle(Color.duskTextPrimary)
                 .tint(Color.duskAccent)
 
-            // Default Audio Language
             Picker("Audio", selection: $preferences.defaultAudioLanguage) {
                 ForEach(CommonLanguage.allCases) { lang in
                     Text(lang.displayName).tag(lang.code)
                 }
             }
             .foregroundStyle(Color.duskTextPrimary)
+        } header: {
+            Text("Playback Defaults")
+                .foregroundStyle(Color.duskTextSecondary)
+        } footer: {
+            Text(playbackDefaultsFooterText)
+                .foregroundStyle(Color.duskTextSecondary)
+        }
+        .listRowBackground(Color.duskSurface)
+    }
 
+    @ViewBuilder
+    private var playbackBehaviorSection: some View {
+        @Bindable var preferences = preferences
+
+        Section {
             Toggle("Continuous Play", isOn: $preferences.continuousPlayEnabled)
                 .foregroundStyle(Color.duskTextPrimary)
                 .tint(Color.duskAccent)
+
+            if preferences.continuousPlayEnabled {
+                Picker("Next Episode Delay", selection: $preferences.continuousPlayCountdown) {
+                    ForEach(ContinuousPlayCountdown.allCases) { countdown in
+                        Text(countdown.displayName).tag(countdown)
+                    }
+                }
+                .foregroundStyle(Color.duskTextPrimary)
+            }
 
             #if !os(tvOS)
             Toggle("Double-Tap to Seek", isOn: $preferences.playerDoubleTapSeekEnabled)
@@ -122,12 +151,25 @@ struct SettingsView: View {
                 .foregroundStyle(Color.duskTextPrimary)
             }
             #endif
+        } header: {
+            Text("Playback Behavior")
+                .foregroundStyle(Color.duskTextSecondary)
+        } footer: {
+            Text(playbackBehaviorFooterText)
+                .foregroundStyle(Color.duskTextSecondary)
+        }
+        .listRowBackground(Color.duskSurface)
+    }
 
+    @ViewBuilder
+    private var playbackAdvancedSection: some View {
+        @Bindable var preferences = preferences
+
+        Section {
             Toggle("Force AVPlayer", isOn: $preferences.forceAVPlayer)
                 .foregroundStyle(Color.duskTextPrimary)
                 .tint(Color.duskAccent)
 
-            // Force VLCKit
             Toggle("Force VLCKit", isOn: $preferences.forceVLCKit)
                 .foregroundStyle(Color.duskTextPrimary)
                 .tint(Color.duskAccent)
@@ -136,10 +178,10 @@ struct SettingsView: View {
                 .foregroundStyle(Color.duskTextPrimary)
                 .tint(Color.duskAccent)
         } header: {
-            Text("Playback")
+            Text("Playback Advanced")
                 .foregroundStyle(Color.duskTextSecondary)
         } footer: {
-            Text(playbackFooterText)
+            Text(playbackAdvancedFooterText)
                 .foregroundStyle(Color.duskTextSecondary)
         }
         .listRowBackground(Color.duskSurface)
@@ -210,10 +252,10 @@ struct SettingsView: View {
         .listRowBackground(Color.duskSurface)
     }
 
-    // MARK: - App
+    // MARK: - Appearance
 
     @ViewBuilder
-    private var appSection: some View {
+    private var appearanceSection: some View {
         @Bindable var preferences = preferences
 
         Section {
@@ -223,7 +265,19 @@ struct SettingsView: View {
                 }
             }
             .foregroundStyle(Color.duskTextPrimary)
+        } header: {
+            Text("Appearance")
+                .foregroundStyle(Color.duskTextSecondary)
+        } footer: {
+            Text(appearanceFooterText)
+                .foregroundStyle(Color.duskTextSecondary)
+        }
+        .listRowBackground(Color.duskSurface)
+    }
 
+    @ViewBuilder
+    private var storageSection: some View {
+        Section {
             Button {
                 AppImageCache.clear()
                 imageCacheClearedAt = .now
@@ -238,7 +292,19 @@ struct SettingsView: View {
             }
             .foregroundStyle(Color.duskAccent)
             .duskSuppressTVOSButtonChrome()
+        } header: {
+            Text("Storage")
+                .foregroundStyle(Color.duskTextSecondary)
+        } footer: {
+            Text(storageFooterText)
+                .foregroundStyle(Color.duskTextSecondary)
+        }
+        .listRowBackground(Color.duskSurface)
+    }
 
+    @ViewBuilder
+    private var aboutSection: some View {
+        Section {
             HStack {
                 Text("Version")
                     .foregroundStyle(Color.duskTextPrimary)
@@ -247,10 +313,7 @@ struct SettingsView: View {
                     .foregroundStyle(Color.duskTextSecondary)
             }
         } header: {
-            Text("App")
-                .foregroundStyle(Color.duskTextSecondary)
-        } footer: {
-            Text(appFooterText)
+            Text("About")
                 .foregroundStyle(Color.duskTextSecondary)
         }
         .listRowBackground(Color.duskSurface)
@@ -321,11 +384,15 @@ struct SettingsView: View {
         CommonLanguage(rawValue: code)?.displayName ?? code.uppercased()
     }
 
-    private var playbackFooterText: String {
+    private var playbackDefaultsFooterText: String {
+        "Choose preferred stream quality and default audio or subtitle languages. Forced Only limits automatic subtitle selection to forced tracks."
+    }
+
+    private var playbackBehaviorFooterText: String {
         #if os(tvOS)
-        "Continuous Play automatically advances TV episodes and is enabled by default. Forced Only limits automatic subtitle selection to forced tracks. Force AVPlayer and Force VLCKit bypass automatic engine selection. Enabling one disables the other. Force AVPlayer may fail on formats AVPlayer cannot handle. Player Debug Overlay shows stream stats in the top-right corner during playback."
+        "Continuous Play shows an Up Next screen after TV episodes finish and can auto-start the next one after the configured delay."
         #else
-        "Continuous Play automatically advances TV episodes and is enabled by default. Double-Tap to Seek adds left and right double-tap seek zones in the player and defaults to 5 seconds back and 15 seconds forward. Forced Only limits automatic subtitle selection to forced tracks. Force AVPlayer and Force VLCKit bypass automatic engine selection. Enabling one disables the other. Force AVPlayer may fail on formats AVPlayer cannot handle. Player Debug Overlay shows stream stats in the top-right corner during playback."
+        "Continuous Play shows an Up Next screen after TV episodes finish and can auto-start the next one after the configured delay. Double-Tap to Seek adds left and right double-tap seek zones in the player."
         #endif
     }
 
@@ -333,8 +400,16 @@ struct SettingsView: View {
         ByteCountFormatter.string(fromByteCount: Int64(imageCacheSize), countStyle: .file)
     }
 
-    private var appFooterText: String {
-        let base = "System follows your device appearance. Light and Dark override it for the whole app. Clear Image Cache removes locally cached posters and artwork so they re-download on demand."
+    private var playbackAdvancedFooterText: String {
+        "Force AVPlayer and Force VLCKit bypass automatic engine selection. Enabling one disables the other. Force AVPlayer may fail on formats it cannot handle. Player Debug Overlay shows stream stats during playback."
+    }
+
+    private var appearanceFooterText: String {
+        "System follows your device appearance. Light and Dark override it for the whole app."
+    }
+
+    private var storageFooterText: String {
+        let base = "Clear Image Cache removes locally cached posters and artwork so they re-download on demand."
 
         guard imageCacheClearedAt != nil else { return base }
         return "\(base) Image cache cleared."
@@ -365,10 +440,10 @@ struct SettingsView: View {
 
     #if os(tvOS)
     @ViewBuilder
-    private var tvPlaybackSection: some View {
+    private var tvPlaybackDefaultsSection: some View {
         @Bindable var preferences = preferences
 
-        TVSettingsSection(title: "Playback", footer: playbackFooterText) {
+        TVSettingsSection(title: "Playback Defaults", footer: playbackDefaultsFooterText) {
             TVSettingsMenuRow(
                 title: "Max Resolution",
                 options: MaxResolution.allCases,
@@ -397,13 +472,34 @@ struct SettingsView: View {
                 selection: $preferences.defaultAudioLanguage,
                 selectedTitle: languageDisplayName(for: preferences.defaultAudioLanguage)
             ) { languageDisplayName(for: $0) }
+        }
+    }
 
-            tvRowDivider
+    @ViewBuilder
+    private var tvPlaybackBehaviorSection: some View {
+        @Bindable var preferences = preferences
 
+        TVSettingsSection(title: "Playback Behavior", footer: playbackBehaviorFooterText) {
             TVSettingsToggleRow(title: "Continuous Play", isOn: $preferences.continuousPlayEnabled)
 
-            tvRowDivider
+            if preferences.continuousPlayEnabled {
+                tvRowDivider
 
+                TVSettingsMenuRow(
+                    title: "Next Episode Delay",
+                    options: ContinuousPlayCountdown.allCases,
+                    selection: $preferences.continuousPlayCountdown,
+                    selectedTitle: preferences.continuousPlayCountdown.displayName
+                ) { $0.displayName }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var tvPlaybackAdvancedSection: some View {
+        @Bindable var preferences = preferences
+
+        TVSettingsSection(title: "Playback Advanced", footer: playbackAdvancedFooterText) {
             TVSettingsToggleRow(title: "Force AVPlayer", isOn: $preferences.forceAVPlayer)
 
             tvRowDivider
@@ -460,19 +556,22 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
-    private var tvAppSection: some View {
+    private var tvAppearanceSection: some View {
         @Bindable var preferences = preferences
 
-        TVSettingsSection(title: "App", footer: appFooterText) {
+        TVSettingsSection(title: "Appearance", footer: appearanceFooterText) {
             TVSettingsMenuRow(
                 title: "Appearance",
                 options: AppearanceMode.allCases,
                 selection: $preferences.appearanceMode,
                 selectedTitle: preferences.appearanceMode.displayName
             ) { $0.displayName }
+        }
+    }
 
-            tvRowDivider
-
+    @ViewBuilder
+    private var tvStorageSection: some View {
+        TVSettingsSection(title: "Storage", footer: storageFooterText) {
             TVSettingsActionRow(
                 title: "Clear Image Cache",
                 tint: Color.duskAccent,
@@ -482,9 +581,12 @@ struct SettingsView: View {
                 imageCacheClearedAt = .now
                 imageCacheSize = AppImageCache.shared.currentDiskUsage
             }
+        }
+    }
 
-            tvRowDivider
-
+    @ViewBuilder
+    private var tvAboutSection: some View {
+        TVSettingsSection(title: "About") {
             HStack(spacing: 20) {
                 Text("Version")
                     .font(.headline)
