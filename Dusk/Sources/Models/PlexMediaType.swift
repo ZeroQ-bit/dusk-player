@@ -1,7 +1,7 @@
 import Foundation
 
 /// The type of media item in a Plex library.
-enum PlexMediaType: String, Codable, Sendable {
+enum PlexMediaType: String, Codable, Sendable, Hashable {
     case movie
     case show
     case person

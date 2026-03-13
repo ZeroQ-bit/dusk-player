@@ -2,7 +2,7 @@ import Foundation
 
 /// A "hub" on the Plex home screen (e.g. "Continue Watching", "Recently Added Movies").
 /// Returned from `GET /hubs` and `GET /hubs/search`.
-struct PlexHub: Codable, Sendable, Identifiable {
+struct PlexHub: Codable, Sendable, Identifiable, Hashable {
     var id: String { hubIdentifier ?? title }
 
     let key: String?

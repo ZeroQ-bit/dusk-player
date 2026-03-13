@@ -38,7 +38,7 @@ final class PlaybackCoordinator {
     private let plexService: PlexService
     private let preferences: UserPreferences
     private var ratingKey: String?
-    private var activeItemDetails: PlexMediaDetails?
+    private(set) var activeItemDetails: PlexMediaDetails?
     private var hasScrobbled = false
     private var didFinalizeCurrentSession = false
     private var isHandlingPlaybackEnded = false

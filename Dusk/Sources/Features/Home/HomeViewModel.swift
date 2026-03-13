@@ -2,6 +2,8 @@ import Foundation
 
 @MainActor @Observable
 final class HomeViewModel {
+    private let maxInlineRecentlyAddedItems = 10
+
     private(set) var hubs: [PlexHub] = []
     private(set) var continueWatching: [PlexItem] = []
     private(set) var isLoading = false
@@ -68,6 +70,31 @@ final class HomeViewModel {
         hub.items.filter { !shouldHideHomeItem($0) }
     }
 
+    func inlineItems(in hub: PlexHub) -> [PlexItem] {
+        let items = visibleItems(in: hub)
+
+        guard isRecentlyAddedHub(hub) else { return items }
+        return Array(items.prefix(maxInlineRecentlyAddedItems))
+    }
+
+    func shouldShowAll(for hub: PlexHub) -> Bool {
+        guard isRecentlyAddedHub(hub), hub.key != nil else { return false }
+
+        let visibleCount = visibleItems(in: hub).count
+        return visibleCount > maxInlineRecentlyAddedItems ||
+            hub.more == true ||
+            (hub.size ?? 0) > maxInlineRecentlyAddedItems
+    }
+
+    func isRecentlyAddedHub(_ hub: PlexHub) -> Bool {
+        let normalizedTitle = hub.title.lowercased()
+
+        guard normalizedTitle.contains("recently added") else { return false }
+
+        let itemTypes = Set(visibleItems(in: hub).map(\.type))
+        return !itemTypes.isEmpty && itemTypes.isSubset(of: [.movie, .show, .season, .episode])
+    }
+
     private func formatEpisode(season: Int?, episode: Int?) -> String? {
         switch (season, episode) {
         case let (s?, e?):
@@ -102,5 +129,93 @@ final class HomeViewModel {
         default:
             return normalizedKey.contains("/playlists/")
         }
+    }
+}
+
+@MainActor
+@Observable
+final class HomeHubItemsViewModel {
+    let hub: PlexHub
+
+    private let plexService: PlexService
+
+    private(set) var items: [PlexItem] = []
+    private(set) var isLoading = false
+    private(set) var error: String?
+
+    init(hub: PlexHub, plexService: PlexService) {
+        self.hub = hub
+        self.plexService = plexService
+    }
+
+    var navigationTitle: String {
+        normalizedTitle(for: hub.title)
+    }
+
+    func loadItems() async {
+        guard items.isEmpty else { return }
+        isLoading = true
+        error = nil
+
+        do {
+            if let hubKey = hub.key {
+                items = try await plexService.getHubItems(hubKey: hubKey)
+            }
+        } catch {
+            self.error = error.localizedDescription
+        }
+
+        isLoading = false
+    }
+
+    func posterURL(for item: PlexItem, width: Int, height: Int) -> URL? {
+        plexService.imageURL(for: item.preferredPosterPath, width: width, height: height)
+    }
+
+    func progress(for item: PlexItem) -> Double? {
+        guard let offset = item.viewOffset, offset > 0,
+              let duration = item.duration, duration > 0
+        else { return nil }
+        return Double(offset) / Double(duration)
+    }
+
+    func subtitle(for item: PlexItem) -> String? {
+        switch item.type {
+        case .movie:
+            return item.year.map(String.init)
+        case .show:
+            if let childCount = item.childCount {
+                return "\(childCount) season\(childCount == 1 ? "" : "s")"
+            }
+            return item.year.map(String.init)
+        case .episode:
+            return formatEpisode(season: item.parentIndex, episode: item.index) ?? item.grandparentTitle
+        default:
+            return item.year.map(String.init)
+        }
+    }
+
+    private func formatEpisode(season: Int?, episode: Int?) -> String? {
+        switch (season, episode) {
+        case let (s?, e?):
+            return "Season \(s) · Episode \(e)"
+        case let (nil, e?):
+            return "Episode \(e)"
+        default:
+            return nil
+        }
+    }
+
+    private func normalizedTitle(for title: String) -> String {
+        guard title.lowercased().contains("recently added") else { return title }
+
+        let suffix = title.replacingOccurrences(
+            of: "Recently Added",
+            with: "",
+            options: [.caseInsensitive]
+        )
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return suffix.isEmpty ? "Recently added" : "Recently added \(suffix)"
     }
 }

@@ -14,6 +14,7 @@ final class UserPreferences {
     private enum Keys {
         static let maxResolution = "maxResolution"
         static let defaultSubtitleLanguage = "defaultSubtitleLanguage"
+        static let subtitleForcedOnly = "subtitleForcedOnly"
         static let defaultAudioLanguage = "defaultAudioLanguage"
         static let continuousPlayEnabled = "continuousPlayEnabled"
         static let forceAVPlayer = "forceAVPlayer"
@@ -31,6 +32,11 @@ final class UserPreferences {
     /// ISO 639-1 language code, or nil for "None" (no default subtitle).
     var defaultSubtitleLanguage: String? {
         didSet { UserDefaults.standard.set(defaultSubtitleLanguage, forKey: Keys.defaultSubtitleLanguage) }
+    }
+
+    /// When enabled, automatic subtitle selection only picks forced tracks.
+    var subtitleForcedOnly: Bool {
+        didSet { UserDefaults.standard.set(subtitleForcedOnly, forKey: Keys.subtitleForcedOnly) }
     }
 
     /// ISO 639-1 language code for preferred audio track.
@@ -87,6 +93,7 @@ final class UserPreferences {
         }
 
         let defaultSubtitleLanguage = defaults.string(forKey: Keys.defaultSubtitleLanguage)
+        let subtitleForcedOnly = defaults.bool(forKey: Keys.subtitleForcedOnly)
         let defaultAudioLanguage = defaults.string(forKey: Keys.defaultAudioLanguage) ?? "en"
         let continuousPlayEnabled = defaults.object(forKey: Keys.continuousPlayEnabled) as? Bool ?? true
         let storedForceAVPlayer = defaults.bool(forKey: Keys.forceAVPlayer)
@@ -105,6 +112,7 @@ final class UserPreferences {
 
         self.maxResolution = maxResolution
         self.defaultSubtitleLanguage = defaultSubtitleLanguage
+        self.subtitleForcedOnly = subtitleForcedOnly
         self.defaultAudioLanguage = defaultAudioLanguage
         self.continuousPlayEnabled = continuousPlayEnabled
         self.forceAVPlayer = forceAVPlayer

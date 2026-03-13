@@ -101,11 +101,11 @@ final class PlexService {
 
     // MARK: - Auth
 
-    func generatePin() async throws -> PlexPin {
+    func generatePin(strong: Bool = false) async throws -> PlexPin {
         try await plexTVRequest(
             method: "POST",
             path: "/api/v2/pins",
-            formBody: ["strong": "true"]
+            formBody: strong ? ["strong": "true"] : nil
         )
     }
 
@@ -274,6 +274,10 @@ final class PlexService {
         try await fetchMetadata(path: "/library/onDeck")
     }
 
+    func getHubItems(hubKey: String) async throws -> [PlexItem] {
+        try await fetchMetadata(path: hubKey)
+    }
+
     // MARK: - Search
 
     func search(query: String) async throws -> [PlexSearchResult] {
@@ -293,7 +297,12 @@ final class PlexService {
     // MARK: - Media Details
 
     func getMediaDetails(ratingKey: String) async throws -> PlexMediaDetails {
-        let items: [PlexMediaDetails] = try await fetchMetadata(path: "/library/metadata/\(ratingKey)")
+        let items: [PlexMediaDetails] = try await fetchMetadata(
+            path: "/library/metadata/\(ratingKey)",
+            queryItems: [
+                URLQueryItem(name: "includeMarkers", value: "1"),
+            ]
+        )
         guard let details = items.first else {
             throw PlexServiceError.decodingError("No metadata found for ratingKey \(ratingKey)")
         }

@@ -85,6 +85,10 @@ struct SettingsView: View {
             // Default Subtitle Language
             subtitleLanguagePicker
 
+            Toggle("Forced Only", isOn: $preferences.subtitleForcedOnly)
+                .foregroundStyle(Color.duskTextPrimary)
+                .tint(Color.duskAccent)
+
             // Default Audio Language
             Picker("Audio", selection: $preferences.defaultAudioLanguage) {
                 ForEach(CommonLanguage.allCases) { lang in
@@ -296,7 +300,7 @@ struct SettingsView: View {
     }
 
     private var playbackFooterText: String {
-        "Continuous Play automatically advances TV episodes and is enabled by default. Force AVPlayer and Force VLCKit bypass automatic engine selection. Enabling one disables the other. Force AVPlayer may fail on formats AVPlayer cannot handle. Player Debug Overlay shows stream stats in the top-right corner during playback."
+        "Continuous Play automatically advances TV episodes and is enabled by default. Forced Only limits automatic subtitle selection to forced tracks. Force AVPlayer and Force VLCKit bypass automatic engine selection. Enabling one disables the other. Force AVPlayer may fail on formats AVPlayer cannot handle. Player Debug Overlay shows stream stats in the top-right corner during playback."
     }
 
     private var formattedCacheSize: String {
@@ -354,6 +358,10 @@ struct SettingsView: View {
                 selection: subtitleLanguageBinding,
                 selectedTitle: subtitleDisplayName(for: subtitleLanguageBinding.wrappedValue)
             ) { subtitleDisplayName(for: $0) }
+
+            tvRowDivider
+
+            TVSettingsToggleRow(title: "Forced Only", isOn: $preferences.subtitleForcedOnly)
 
             tvRowDivider
 

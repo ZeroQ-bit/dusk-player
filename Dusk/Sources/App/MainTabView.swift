@@ -2,6 +2,7 @@ import SwiftUI
 
 enum AppNavigationRoute: Hashable {
     case library(PlexLibrary)
+    case hub(PlexHub)
     case media(type: PlexMediaType, ratingKey: String)
     case person(PlexPersonReference)
 
@@ -24,6 +25,8 @@ struct AppNavigationDestinationView: View {
         switch route {
         case .library(let library):
             LibraryItemsView(library: library, plexService: plexService)
+        case .hub(let hub):
+            HomeHubItemsView(hub: hub, plexService: plexService)
         case let .media(type, ratingKey):
             MediaDetailDestinationView(
                 type: type,
@@ -100,6 +103,7 @@ struct MainTabView: View {
                 PlayerView(
                     engine: engine,
                     playbackSource: playbackSource,
+                    mediaDetails: playback.activeItemDetails,
                     debugInfo: playback.debugInfo
                 )
                 .id(playback.playerPresentationID)

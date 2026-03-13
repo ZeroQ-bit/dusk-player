@@ -3,7 +3,7 @@ import SwiftUI
 struct SignInView: View {
     @Environment(PlexService.self) private var plexService
     @Environment(\.openURL) private var openURL
-    @State private var pinCode: String?
+    @State private var linkPinCode: String?
     @State private var isSigningIn = false
     @State private var error: String?
     @State private var pollingTask: Task<Void, Never>?
@@ -33,21 +33,24 @@ struct SignInView: View {
                         .padding(.horizontal, 40)
                 }
 
-                if let pinCode, isSigningIn {
+                if isSigningIn {
                     VStack(spacing: 12) {
-                        Text("Approve in the browser, or go to")
+                        Text("Approve in the browser that opened, or go to")
                             .foregroundStyle(Color.duskTextSecondary)
                             .font(.callout)
-                        Text("plex.tv/link")
-                            .font(.headline)
-                            .foregroundStyle(Color.duskTextPrimary)
-                        Text("and enter code:")
-                            .foregroundStyle(Color.duskTextSecondary)
-                            .font(.callout)
-                        Text(pinCode)
-                            .font(.system(.title, design: .monospaced, weight: .bold))
-                            .tracking(4)
-                            .foregroundStyle(Color.duskTextPrimary)
+
+                        if let linkPinCode {
+                            Text("plex.tv/link")
+                                .font(.headline)
+                                .foregroundStyle(Color.duskTextPrimary)
+                            Text("and enter this code:")
+                                .foregroundStyle(Color.duskTextSecondary)
+                                .font(.callout)
+                            Text(linkPinCode)
+                                .font(.system(.title, design: .monospaced, weight: .bold))
+                                .tracking(4)
+                                .foregroundStyle(Color.duskTextPrimary)
+                        }
                     }
                     .padding()
                 }
@@ -94,25 +97,28 @@ struct SignInView: View {
     private func signIn() async {
         isSigningIn = true
         error = nil
-        pinCode = nil
+        linkPinCode = nil
 
         do {
-            let pin = try await plexService.generatePin()
-            pinCode = pin.code
+            // Plex uses a longer-lived "strong" PIN for browser approval, but
+            // plex.tv/link expects the short code flow, so we keep both active.
+            let browserPin = try await plexService.generatePin(strong: true)
+            let linkPin = try? await plexService.generatePin()
+            linkPinCode = linkPin?.code
 
             // Open the Plex auth page in Safari
-            if let url = plexService.authURL(for: pin) {
+            if let url = plexService.authURL(for: browserPin) {
                 openURL(url)
             }
 
-            startPolling(pinId: pin.id)
+            startPolling(pinIDs: [browserPin.id, linkPin?.id].compactMap { $0 })
         } catch {
             self.error = error.localizedDescription
             isSigningIn = false
         }
     }
 
-    private func startPolling(pinId: Int) {
+    private func startPolling(pinIDs: [Int]) {
         pollingTask?.cancel()
         pollingTask = Task {
             for _ in 0..<120 {
@@ -120,16 +126,18 @@ struct SignInView: View {
                 try? await Task.sleep(for: .seconds(1))
                 guard !Task.isCancelled else { break }
 
-                if let token = try? await plexService.checkPin(pinId) {
-                    plexService.setAuthToken(token)
-                    isSigningIn = false
-                    pinCode = nil
-                    return
+                for pinID in pinIDs {
+                    if let token = try? await plexService.checkPin(pinID) {
+                        plexService.setAuthToken(token)
+                        isSigningIn = false
+                        linkPinCode = nil
+                        return
+                    }
                 }
             }
 
             isSigningIn = false
-            pinCode = nil
+            linkPinCode = nil
             error = "Sign-in timed out. Please try again."
         }
     }
@@ -137,6 +145,6 @@ struct SignInView: View {
     private func cancelSignIn() {
         pollingTask?.cancel()
         isSigningIn = false
-        pinCode = nil
+        linkPinCode = nil
     }
 }

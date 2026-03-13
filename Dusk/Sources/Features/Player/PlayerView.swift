@@ -9,15 +9,23 @@ struct PlayerView: View {
     @State private var viewModel: PlayerViewModel
     @Environment(\.dismiss) private var dismiss
     private let playbackSource: PlaybackSource
+    private let mediaDetails: PlexMediaDetails?
     private let debugInfo: PlaybackDebugInfo?
 
     init(
         engine: any PlaybackEngine,
         playbackSource: PlaybackSource,
+        mediaDetails: PlexMediaDetails? = nil,
         debugInfo: PlaybackDebugInfo? = nil
     ) {
-        _viewModel = State(initialValue: PlayerViewModel(engine: engine))
+        _viewModel = State(
+            initialValue: PlayerViewModel(
+                engine: engine,
+                markers: mediaDetails?.markers ?? []
+            )
+        )
         self.playbackSource = playbackSource
+        self.mediaDetails = mediaDetails
         self.debugInfo = debugInfo
     }
 
@@ -56,6 +64,12 @@ struct PlayerView: View {
                 debugOverlay(debugInfo)
             }
 
+            if let marker = viewModel.activeSkipMarker,
+               viewModel.playbackError == nil {
+                skipMarkerOverlay(marker)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
+
             // Controls overlay
             if viewModel.showControls, viewModel.playbackError == nil {
                 controlsOverlay
@@ -63,9 +77,14 @@ struct PlayerView: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: viewModel.showControls)
+        .animation(.easeInOut(duration: 0.2), value: viewModel.activeSkipMarker?.id)
         .duskStatusBarHidden()
         .persistentSystemOverlays(.hidden)
         .onAppear {
+            viewModel.configureAutomaticTrackSelection(
+                preferences: preferences,
+                part: debugInfo?.part ?? mediaDetails?.media.first?.parts.first
+            )
             // Start playback only after the full-screen player view exists.
             viewModel.startPlaybackIfNeeded(source: playbackSource)
         }
@@ -199,7 +218,7 @@ struct PlayerView: View {
     // MARK: - Top Bar
 
     private var topBar: some View {
-        HStack {
+        HStack(alignment: .top, spacing: 12) {
             Button {
                 viewModel.cleanup()
                 dismiss()
@@ -210,8 +229,126 @@ struct PlayerView: View {
                     .frame(width: 44, height: 44)
                     .background(.ultraThinMaterial, in: Circle())
             }
+
+            if let header = mediaHeader {
+                mediaHeaderView(header)
+            }
+
             Spacer()
         }
+    }
+
+    private func mediaHeaderView(_ header: PlayerMediaHeader) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(header.title)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+
+            if let secondaryTitle = header.secondaryTitle {
+                Text(secondaryTitle)
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+            }
+
+            if let subtitle = header.subtitle {
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.72))
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: 320, alignment: .leading)
+        .shadow(color: .black.opacity(0.35), radius: 10, y: 2)
+    }
+
+    private var mediaHeader: PlayerMediaHeader? {
+        guard let mediaDetails else { return nil }
+
+        if mediaDetails.type == .episode {
+            let title = mediaDetails.grandparentTitle ?? mediaDetails.title
+            let secondaryTitle = mediaDetails.grandparentTitle == nil ? nil : mediaDetails.title
+            let subtitle = episodeContextSubtitle(
+                season: mediaDetails.parentIndex,
+                episode: mediaDetails.index
+            )
+
+            return PlayerMediaHeader(
+                title: title,
+                secondaryTitle: secondaryTitle,
+                subtitle: subtitle
+            )
+        }
+
+        return PlayerMediaHeader(
+            title: mediaDetails.title,
+            secondaryTitle: nil,
+            subtitle: mediaDetails.year.map(String.init)
+        )
+    }
+
+    private func episodeContextSubtitle(season: Int?, episode: Int?) -> String? {
+        switch (season, episode) {
+        case let (season?, episode?):
+            return "Season \(season) · Episode \(episode)"
+        case let (season?, nil):
+            return "Season \(season)"
+        case let (nil, episode?):
+            return "Episode \(episode)"
+        default:
+            return nil
+        }
+    }
+
+    private struct PlayerMediaHeader {
+        let title: String
+        let secondaryTitle: String?
+        let subtitle: String?
+    }
+
+    // MARK: - Skip Marker Overlay
+
+    private func skipMarkerOverlay(_ marker: PlexMarker) -> some View {
+        GeometryReader { geometry in
+            VStack {
+                Spacer()
+
+                HStack {
+                    Spacer()
+                    Button {
+                        viewModel.skipActiveMarker()
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: marker.isCredits ? "forward.end.fill" : "chevron.forward.2")
+                                .font(.callout.weight(.semibold))
+
+                            Text(marker.skipButtonTitle ?? "Skip")
+                                .font(.subheadline.weight(.semibold))
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 13)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .overlay {
+                            Capsule()
+                                .strokeBorder(.white.opacity(0.14), lineWidth: 1)
+                        }
+                        .shadow(color: .black.opacity(0.28), radius: 18, y: 8)
+                        .opacity(0.92)
+                    }
+                    .duskSuppressTVOSButtonChrome()
+                    .duskTVOSFocusEffectShape(Capsule())
+                }
+            }
+            .padding(.trailing, 20)
+            .padding(.bottom, max(geometry.safeAreaInsets.bottom + skipMarkerBottomInset, 24))
+        }
+        .ignoresSafeArea()
+    }
+
+    private var skipMarkerBottomInset: CGFloat {
+        viewModel.showControls ? 124 : 36
     }
 
     // MARK: - Center Controls

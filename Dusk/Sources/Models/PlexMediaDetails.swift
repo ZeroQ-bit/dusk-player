@@ -46,6 +46,7 @@ struct PlexMediaDetails: Codable, Sendable, Identifiable {
     let directors: [PlexTag]?
     let writers: [PlexTag]?
     let roles: [PlexRole]?
+    let markers: [PlexMarker]
 
     /// The media versions for this item. A single item can have multiple
     /// versions (e.g. different resolutions or codecs).
@@ -61,6 +62,7 @@ struct PlexMediaDetails: Codable, Sendable, Identifiable {
         case directors = "Director"
         case writers = "Writer"
         case roles = "Role"
+        case markers = "Marker"
         case media = "Media"
     }
 
@@ -96,7 +98,38 @@ struct PlexMediaDetails: Codable, Sendable, Identifiable {
         directors = try container.decodeIfPresent([PlexTag].self, forKey: .directors)
         writers = try container.decodeIfPresent([PlexTag].self, forKey: .writers)
         roles = try container.decodeIfPresent([PlexRole].self, forKey: .roles)
+        markers = (try container.decodeIfPresent([PlexMarker].self, forKey: .markers) ?? [])
+            .sorted { $0.startTimeOffset < $1.startTimeOffset }
         media = try container.decodeIfPresent([PlexMedia].self, forKey: .media) ?? []
+    }
+}
+
+struct PlexMarker: Codable, Sendable, Identifiable, Equatable {
+    let id: Int
+    let type: String
+    let startTimeOffset: Int
+    let endTimeOffset: Int
+
+    var isIntro: Bool {
+        type.caseInsensitiveCompare("intro") == .orderedSame
+    }
+
+    var isCredits: Bool {
+        type.caseInsensitiveCompare("credits") == .orderedSame
+    }
+
+    var skipButtonTitle: String? {
+        if isIntro {
+            return "Skip Intro"
+        }
+        if isCredits {
+            return "Skip Credits"
+        }
+        return nil
+    }
+
+    func contains(positionMs: Int) -> Bool {
+        positionMs >= startTimeOffset && positionMs < endTimeOffset
     }
 }
 
