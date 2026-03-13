@@ -2,7 +2,7 @@ name: Dusk
 options:
   bundleIdPrefix: com.dusk-player
   deploymentTarget:
-    iOS: "17.0"
+    iOS: "18.0"
     tvOS: "26.0"
   xcodeVersion: "16.0"
   generateEmptyDirectories: true

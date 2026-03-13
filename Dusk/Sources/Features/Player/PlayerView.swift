@@ -1,5 +1,49 @@
 import SwiftUI
 
+private struct PlayerSeekFeedbackOverlayView: View {
+    let presentation: PlayerSeekFeedbackPresentation
+
+    private let badgeSize: CGFloat = 64
+    private let centerGap: CGFloat = 128
+
+    var body: some View {
+        ZStack {
+            if presentation.direction == .backward {
+                feedbackBadge
+                    .offset(x: -centerGap)
+            }
+
+            if presentation.direction == .forward {
+                feedbackBadge
+                    .offset(x: centerGap)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+    }
+
+    private var feedbackBadge: some View {
+        ZStack {
+            Circle()
+                .fill(.black.opacity(0.08))
+                .background(.ultraThinMaterial, in: Circle())
+                .overlay {
+                    Circle()
+                        .strokeBorder(.white.opacity(0.06), lineWidth: 1)
+                }
+
+            Image(systemName: presentation.direction.symbolName)
+                .font(.system(size: 38, weight: .medium))
+                .foregroundStyle(.white.opacity(0.58))
+                .offset(y: -2)
+        }
+        .frame(width: badgeSize, height: badgeSize)
+        .shadow(color: .black.opacity(0.08), radius: 8, y: 4)
+        .opacity(0.7)
+    }
+}
+
 struct PlayerView: View {
     @Environment(PlexService.self) private var plexService
     @Environment(PlaybackCoordinator.self) private var playback
@@ -48,6 +92,11 @@ struct PlayerView: View {
             } else {
                 interactionOverlay
 
+                if let seekFeedback = viewModel.seekFeedback {
+                    PlayerSeekFeedbackOverlayView(presentation: seekFeedback)
+                        .transition(.opacity)
+                }
+
                 if viewModel.shouldShowBufferingIndicator {
                     ProgressView()
                         .scaleEffect(1.5)
@@ -86,6 +135,7 @@ struct PlayerView: View {
         }
         .animation(.easeInOut(duration: 0.25), value: viewModel.showControls)
         .animation(.easeInOut(duration: 0.2), value: viewModel.activeSkipMarker?.id)
+        .animation(.easeOut(duration: 0.14), value: viewModel.seekFeedback?.trigger)
         .animation(.easeInOut(duration: 0.25), value: playback.upNextPresentation?.episode.ratingKey)
         .duskStatusBarHidden()
         .persistentSystemOverlays(.hidden)
@@ -157,7 +207,7 @@ struct PlayerView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .gesture(
                     TapGesture(count: 2)
-                        .onEnded { viewModel.seek(by: seekOffset) }
+                        .onEnded { viewModel.handleDoubleTapSeek(by: seekOffset) }
                         .exclusively(
                             before: TapGesture()
                                 .onEnded { viewModel.toggleControls() }

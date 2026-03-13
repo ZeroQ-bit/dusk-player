@@ -1,6 +1,26 @@
 import Foundation
 import SwiftUI
 
+struct PlayerSeekFeedbackPresentation: Equatable {
+    enum Direction: Equatable {
+        case backward
+        case forward
+
+        var symbolName: String {
+            switch self {
+            case .backward:
+                return "gobackward"
+            case .forward:
+                return "goforward"
+            }
+        }
+    }
+
+    let direction: Direction
+    let seconds: Int
+    let trigger: Int
+}
+
 /// Manages player UI state: syncs from the engine via timer, handles overlay
 /// visibility, scrubbing, and forwards control actions to the engine.
 @MainActor @Observable
@@ -20,6 +40,7 @@ final class PlayerViewModel {
     var showAudioPicker = false
     var isScrubbing = false
     var scrubPosition: TimeInterval = 0
+    var seekFeedback: PlayerSeekFeedbackPresentation?
 
     let engine: any PlaybackEngine
     let markers: [PlexMarker]
@@ -33,6 +54,7 @@ final class PlayerViewModel {
     var hasAppliedAutomaticSubtitleSelection = false
     @ObservationIgnored nonisolated(unsafe) var syncTimer: Timer?
     @ObservationIgnored nonisolated(unsafe) var hideTimer: Timer?
+    @ObservationIgnored nonisolated(unsafe) var seekFeedbackTask: Task<Void, Never>?
 
     init(engine: any PlaybackEngine, markers: [PlexMarker] = []) {
         self.engine = engine
@@ -44,13 +66,16 @@ final class PlayerViewModel {
     deinit {
         syncTimer?.invalidate()
         hideTimer?.invalidate()
+        seekFeedbackTask?.cancel()
     }
 
     func cleanup() {
         syncTimer?.invalidate()
         hideTimer?.invalidate()
+        seekFeedbackTask?.cancel()
         syncTimer = nil
         hideTimer = nil
+        seekFeedbackTask = nil
         // Pause (not stop) so the coordinator can read final position
         // for timeline reporting before tearing down the engine.
         engine.pause()

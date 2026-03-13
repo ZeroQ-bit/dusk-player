@@ -1,6 +1,9 @@
 import Foundation
+import SwiftUI
 
 extension PlayerViewModel {
+    private static let seekFeedbackDisplayDuration: Duration = .milliseconds(325)
+
     func startSync() {
         syncTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
@@ -35,6 +38,11 @@ extension PlayerViewModel {
 
     func seek(by offset: TimeInterval, revealControls: Bool = false) {
         seek(to: displayPosition + offset, revealControls: revealControls)
+    }
+
+    func handleDoubleTapSeek(by offset: TimeInterval) {
+        showSeekFeedback(for: offset)
+        seek(by: offset)
     }
 
     func skipActiveMarker() {
@@ -100,6 +108,44 @@ extension PlayerViewModel {
             touchControls()
         } else if showControls {
             scheduleHide()
+        }
+    }
+
+    private func showSeekFeedback(for offset: TimeInterval) {
+        let direction: PlayerSeekFeedbackPresentation.Direction = offset < 0 ? .backward : .forward
+        let seconds = max(1, Int(abs(offset).rounded()))
+        let nextTrigger = (seekFeedback?.trigger ?? 0) + 1
+
+        if let currentFeedback = seekFeedback, currentFeedback.direction == direction {
+            withAnimation(.easeOut(duration: 0.12)) {
+                seekFeedback = PlayerSeekFeedbackPresentation(
+                    direction: direction,
+                    seconds: currentFeedback.seconds + seconds,
+                    trigger: nextTrigger
+                )
+            }
+        } else {
+            withAnimation(.easeOut(duration: 0.12)) {
+                seekFeedback = PlayerSeekFeedbackPresentation(
+                    direction: direction,
+                    seconds: seconds,
+                    trigger: nextTrigger
+                )
+            }
+        }
+
+        seekFeedbackTask?.cancel()
+        seekFeedbackTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: Self.seekFeedbackDisplayDuration)
+            } catch {
+                return
+            }
+
+            guard let self, !Task.isCancelled else { return }
+            withAnimation(.easeIn(duration: 0.18)) {
+                self.seekFeedback = nil
+            }
         }
     }
 }
