@@ -12,81 +12,93 @@ struct SignInView: View {
         ZStack {
             Color.duskBackground.ignoresSafeArea()
 
-            VStack(spacing: 32) {
+            VStack(spacing: 0) {
                 Spacer()
 
-                VStack(spacing: 8) {
-                    Text("Dusk")
-                        .font(.largeTitle.bold())
-                        .foregroundStyle(Color.duskTextPrimary)
-                    Text("A Plex client for Apple platforms")
-                        .foregroundStyle(Color.duskTextSecondary)
-                }
+                // Branding
+                VStack(spacing: 16) {
+                    Image("LaunchLogo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 80, height: 80)
 
-                Spacer()
-
-                if let error {
-                    Text(error)
-                        .foregroundStyle(.red)
-                        .font(.callout)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 40)
-                }
-
-                if isSigningIn {
-                    VStack(spacing: 12) {
-                        Text("Approve in the browser that opened, or go to")
+                    VStack(spacing: 6) {
+                        Text("Dusk")
+                            .font(.largeTitle.bold())
+                            .foregroundStyle(Color.duskTextPrimary)
+                        Text("A beautiful, fast Plex client.")
+                            .font(.subheadline)
                             .foregroundStyle(Color.duskTextSecondary)
-                            .font(.callout)
+                    }
+                }
 
-                        if let linkPinCode {
-                            Text("plex.tv/link")
-                                .font(.headline)
-                                .foregroundStyle(Color.duskTextPrimary)
-                            Text("and enter this code:")
+                Spacer()
+
+                // Sign-in content
+                VStack(spacing: 24) {
+                    if let error {
+                        Text(error)
+                            .foregroundStyle(.red)
+                            .font(.callout)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 40)
+                    }
+
+                    if isSigningIn {
+                        VStack(spacing: 12) {
+                            Text("Approve in the browser that opened, or go to")
                                 .foregroundStyle(Color.duskTextSecondary)
                                 .font(.callout)
-                            Text(linkPinCode)
-                                .font(.system(.title, design: .monospaced, weight: .bold))
-                                .tracking(4)
-                                .foregroundStyle(Color.duskTextPrimary)
+
+                            if let linkPinCode {
+                                Text("plex.tv/link")
+                                    .font(.headline)
+                                    .foregroundStyle(Color.duskTextPrimary)
+                                Text("and enter this code:")
+                                    .foregroundStyle(Color.duskTextSecondary)
+                                    .font(.callout)
+                                Text(linkPinCode)
+                                    .font(.system(.title, design: .monospaced, weight: .bold))
+                                    .tracking(4)
+                                    .foregroundStyle(Color.duskTextPrimary)
+                            }
                         }
                     }
-                    .padding()
-                }
 
-                Button {
-                    Task { await signIn() }
-                } label: {
-                    HStack(spacing: 8) {
-                        if isSigningIn {
-                            ProgressView()
-                                .tint(.white)
+                    Button {
+                        Task { await signIn() }
+                    } label: {
+                        HStack(spacing: 8) {
+                            if isSigningIn {
+                                ProgressView()
+                                    .tint(.white)
+                            }
+                            Text(isSigningIn ? "Waiting for approval…" : "Sign in with Plex")
                         }
-                        Text(isSigningIn ? "Waiting for approval…" : "Sign in with Plex")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .foregroundStyle(.white)
+                        .background {
+                            RoundedRectangle(cornerRadius: 100)
+                                .fill(Color.duskAccent)
+                        }
                     }
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .foregroundStyle(.white)
-                    .background {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.duskAccent)
-                    }
-                }
-                .disabled(isSigningIn)
-                .duskSuppressTVOSButtonChrome()
-                .padding(.horizontal, 40)
-
-                if isSigningIn {
-                    Button("Cancel") {
-                        cancelSignIn()
-                    }
-                    .foregroundStyle(Color.duskTextSecondary)
+                    .disabled(isSigningIn)
                     .duskSuppressTVOSButtonChrome()
+                    .padding(.horizontal, 40)
+
+                    if isSigningIn {
+                        Button("Cancel") {
+                            cancelSignIn()
+                        }
+                        .foregroundStyle(Color.duskTextSecondary)
+                        .duskSuppressTVOSButtonChrome()
+                    }
                 }
 
                 Spacer()
+                    .frame(height: 60)
             }
         }
         .onDisappear {
