@@ -15,7 +15,7 @@ extension PlexService {
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        applyHeaders(to: &request)
+        applyHeaders(to: &request, token: authToken)
         let data = try await executeRequest(request)
 
         guard let jsonArray = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
@@ -42,11 +42,7 @@ extension PlexService {
                 var request = URLRequest(url: candidate.probeURL)
                 request.httpMethod = "GET"
                 request.timeoutInterval = candidate.connection.local ? 20 : 8
-                applyHeaders(to: &request)
-
-                if let token {
-                    request.setValue(token, forHTTPHeaderField: "X-Plex-Token")
-                }
+                applyHeaders(to: &request, token: token)
 
                 do {
                     let (_, response) = try await session.data(for: request)
@@ -60,7 +56,7 @@ extension PlexService {
                         continue
                     }
 
-                    setServer(server, baseURL: candidate.baseURL)
+                    setServer(server, baseURL: candidate.baseURL, accessToken: token)
                     return
                 } catch {
                     lastFailure = error.localizedDescription

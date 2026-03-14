@@ -59,7 +59,7 @@ extension PlexService {
             : baseURL.absoluteString + part.key
         guard var components = URLComponents(string: urlString) else { return nil }
         var items = components.queryItems ?? []
-        if let token = authToken {
+        if let token = preferredServerToken {
             items.append(URLQueryItem(name: "X-Plex-Token", value: token))
         }
         components.queryItems = items.isEmpty ? nil : items

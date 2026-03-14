@@ -6,6 +6,7 @@ final class PlexService {
     var authToken: String?
     private(set) var connectedServer: PlexServer?
     var serverBaseURL: URL?
+    private(set) var serverAuthToken: String?
 
     var isAuthenticated: Bool { authToken != nil }
     var isConnected: Bool { serverBaseURL != nil }
@@ -17,6 +18,7 @@ final class PlexService {
 
     static let plexTVBase = "https://plex.tv"
     static let keychainTokenKey = "PlexAuthToken"
+    static let keychainServerTokenKey = "PlexServerAuthToken"
     static let defaultsClientIDKey = "PlexClientIdentifier"
     static let defaultsServerURLKey = "PlexServerURL"
     static let defaultsServerIDKey = "PlexServerID"
@@ -45,6 +47,11 @@ final class PlexService {
             authToken = token
         }
 
+        if let data = KeychainHelper.load(key: Self.keychainServerTokenKey),
+           let token = String(data: data, encoding: .utf8) {
+            serverAuthToken = token
+        }
+
         if let urlString = UserDefaults.standard.string(forKey: Self.defaultsServerURLKey),
            let url = URL(string: urlString) {
             serverBaseURL = url
@@ -54,23 +61,40 @@ final class PlexService {
            let server = try? decoder.decode(PlexServer.self, from: serverData) {
             connectedServer = server
         }
+
+        if serverAuthToken == nil, let fallbackToken = connectedServer?.accessToken {
+            serverAuthToken = fallbackToken
+            KeychainHelper.save(key: Self.keychainServerTokenKey, data: Data(fallbackToken.utf8))
+        }
     }
 
-    func setServer(_ server: PlexServer, baseURL: URL) {
+    var preferredServerToken: String? {
+        serverAuthToken ?? connectedServer?.accessToken ?? authToken
+    }
+
+    func setServer(_ server: PlexServer, baseURL: URL, accessToken: String?) {
         connectedServer = server
         serverBaseURL = baseURL
+        serverAuthToken = accessToken
         UserDefaults.standard.set(baseURL.absoluteString, forKey: Self.defaultsServerURLKey)
         UserDefaults.standard.set(server.clientIdentifier, forKey: Self.defaultsServerIDKey)
         if let data = try? encoder.encode(server) {
             UserDefaults.standard.set(data, forKey: Self.defaultsServerDataKey)
+        }
+        if let accessToken {
+            KeychainHelper.save(key: Self.keychainServerTokenKey, data: Data(accessToken.utf8))
+        } else {
+            KeychainHelper.delete(key: Self.keychainServerTokenKey)
         }
     }
 
     func clearServer() {
         connectedServer = nil
         serverBaseURL = nil
+        serverAuthToken = nil
         UserDefaults.standard.removeObject(forKey: Self.defaultsServerURLKey)
         UserDefaults.standard.removeObject(forKey: Self.defaultsServerIDKey)
         UserDefaults.standard.removeObject(forKey: Self.defaultsServerDataKey)
+        KeychainHelper.delete(key: Self.keychainServerTokenKey)
     }
 }

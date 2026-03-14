@@ -4,27 +4,13 @@ import UIKit
 #endif
 
 extension PlexService {
-    var plexHeaders: [String: String] {
-        var headers: [String: String] = [
+    var basePlexHeaders: [String: String] {
+        [
             "Accept": "application/json",
             "X-Plex-Client-Identifier": clientIdentifier,
             "X-Plex-Product": "Dusk",
             "X-Plex-Version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0",
         ]
-
-        #if os(tvOS)
-        headers["X-Plex-Platform"] = "tvOS"
-        headers["X-Plex-Device-Name"] = "Apple TV"
-        #elseif canImport(UIKit)
-        headers["X-Plex-Platform"] = "iOS"
-        headers["X-Plex-Device-Name"] = UIDevice.current.name
-        #endif
-
-        if let token = authToken {
-            headers["X-Plex-Token"] = token
-        }
-
-        return headers
     }
 
     func plexTVRequest<T: Decodable>(
@@ -39,7 +25,7 @@ extension PlexService {
 
         var request = URLRequest(url: url)
         request.httpMethod = method
-        applyHeaders(to: &request)
+        applyHeaders(to: &request, token: authToken)
 
         if let formBody {
             request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
@@ -67,7 +53,7 @@ extension PlexService {
 
         var request = URLRequest(url: url)
         request.httpMethod = method
-        applyHeaders(to: &request)
+        applyHeaders(to: &request, token: preferredServerToken)
 
         return try await executeRequest(request)
     }
@@ -99,8 +85,22 @@ extension PlexService {
         return response.MediaContainer.Hub ?? []
     }
 
-    func applyHeaders(to request: inout URLRequest) {
-        for (key, value) in plexHeaders {
+    func applyHeaders(to request: inout URLRequest, token: String?) {
+        var headers = basePlexHeaders
+
+        #if os(tvOS)
+        headers["X-Plex-Platform"] = "tvOS"
+        headers["X-Plex-Device-Name"] = "Apple TV"
+        #elseif canImport(UIKit)
+        headers["X-Plex-Platform"] = "iOS"
+        headers["X-Plex-Device-Name"] = UIDevice.current.name
+        #endif
+
+        if let token {
+            headers["X-Plex-Token"] = token
+        }
+
+        for (key, value) in headers {
             request.setValue(value, forHTTPHeaderField: key)
         }
     }

@@ -2,6 +2,9 @@ import Foundation
 
 extension PlexService {
     func setAuthToken(_ token: String) {
+        if authToken != token {
+            clearServer()
+        }
         authToken = token
         KeychainHelper.save(key: Self.keychainTokenKey, data: Data(token.utf8))
     }

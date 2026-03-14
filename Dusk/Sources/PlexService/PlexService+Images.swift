@@ -47,7 +47,7 @@ extension PlexService {
             items.append(URLQueryItem(name: "height", value: String(height)))
         }
 
-        if let token = authToken {
+        if let token = preferredServerToken {
             items.append(URLQueryItem(name: "X-Plex-Token", value: token))
         }
 
@@ -66,7 +66,7 @@ extension PlexService {
             : baseURL.absoluteString
         guard var components = URLComponents(string: base + path) else { return nil }
 
-        if includeToken, let token = authToken {
+        if includeToken, let token = preferredServerToken {
             var items = components.queryItems ?? []
             items.append(URLQueryItem(name: "X-Plex-Token", value: token))
             components.queryItems = items
