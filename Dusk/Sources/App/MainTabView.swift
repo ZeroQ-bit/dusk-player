@@ -112,19 +112,10 @@ struct MainTabView: View {
             .fullScreenCover(isPresented: $bindablePlayback.showPlayer, onDismiss: {
                 playback.onPlayerDismissed()
             }) {
-                if let engine = playback.engine,
-                   let playbackSource = playback.playbackSource {
-                    PlayerView(
-                        engine: engine,
-                        playbackSource: playbackSource,
-                        mediaDetails: playback.activeItemDetails,
-                        debugInfo: playback.debugInfo
-                    )
-                    .id(playback.playerPresentationID)
+                PlayerView()
                     .environment(plexService)
                     .environment(playback)
                     .environment(playback.preferences)
-                }
             }
     }
 

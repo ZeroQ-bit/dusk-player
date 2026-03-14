@@ -43,6 +43,7 @@ final class PlayerViewModel {
     var seekFeedback: PlayerSeekFeedbackPresentation?
 
     let engine: any PlaybackEngine
+    let engineView: AnyView
     let markers: [PlexMarker]
     var hasLoadedSource = false
     var sourcePart: PlexMediaPart?
@@ -58,6 +59,7 @@ final class PlayerViewModel {
 
     init(engine: any PlaybackEngine, markers: [PlexMarker] = []) {
         self.engine = engine
+        self.engineView = engine.makePlayerView()
         self.markers = markers.sorted { $0.startTimeOffset < $1.startTimeOffset }
         startSync()
         scheduleHide()

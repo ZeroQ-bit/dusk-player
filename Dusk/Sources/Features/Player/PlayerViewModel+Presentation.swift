@@ -2,10 +2,6 @@ import Foundation
 import SwiftUI
 
 extension PlayerViewModel {
-    var engineView: AnyView {
-        engine.makePlayerView()
-    }
-
     var displayPosition: TimeInterval {
         isScrubbing ? scrubPosition : currentTime
     }

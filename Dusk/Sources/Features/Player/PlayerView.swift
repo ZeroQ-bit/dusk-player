@@ -45,6 +45,27 @@ private struct PlayerSeekFeedbackOverlayView: View {
 }
 
 struct PlayerView: View {
+    @Environment(PlaybackCoordinator.self) private var playback
+
+    var body: some View {
+        Group {
+            if let engine = playback.engine,
+               let playbackSource = playback.playbackSource {
+                PlayerSessionView(
+                    engine: engine,
+                    playbackSource: playbackSource,
+                    mediaDetails: playback.activeItemDetails,
+                    debugInfo: playback.debugInfo
+                )
+                .id(playback.playerPresentationID)
+            } else {
+                Color.black.ignoresSafeArea()
+            }
+        }
+    }
+}
+
+private struct PlayerSessionView: View {
     @Environment(PlexService.self) private var plexService
     @Environment(PlaybackCoordinator.self) private var playback
     @Environment(UserPreferences.self) private var preferences
@@ -230,7 +251,16 @@ struct PlayerView: View {
                 HStack {
                     Spacer()
                     Button {
-                        viewModel.skipActiveMarker()
+                        if marker.isCredits {
+                            Task { @MainActor in
+                                let didPresentUpNext = await playback.skipCreditsToUpNextIfPossible()
+                                if !didPresentUpNext {
+                                    viewModel.skipActiveMarker()
+                                }
+                            }
+                        } else {
+                            viewModel.skipActiveMarker()
+                        }
                     } label: {
                         HStack(spacing: 10) {
                             Image(systemName: marker.isCredits ? "forward.end.fill" : "chevron.forward.2")

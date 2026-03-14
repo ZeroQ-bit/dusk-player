@@ -113,20 +113,19 @@ enum PlaybackDecision: Sendable {
 }
 
 struct UpNextPresentation: Sendable {
+    enum Source: Sendable {
+        case playbackEnded
+        case creditsSkipped
+    }
+
     let episode: PlexEpisode
+    let source: Source
     var shouldAutoplay: Bool
     let countdownDuration: Int
     var secondsRemaining: Int?
+    var autoplayProgress: Double?
     let autoplayBlockedByPassoutProtection: Bool
     let passoutProtectionEpisodeLimit: Int?
     var isStarting = false
     var errorMessage: String?
-
-    var autoplayProgress: Double? {
-        guard shouldAutoplay,
-              countdownDuration > 0,
-              let secondsRemaining else { return nil }
-        let elapsed = countdownDuration - secondsRemaining
-        return min(max(Double(elapsed) / Double(countdownDuration), 0), 1)
-    }
 }

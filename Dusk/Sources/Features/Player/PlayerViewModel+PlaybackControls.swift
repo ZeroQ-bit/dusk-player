@@ -3,6 +3,7 @@ import SwiftUI
 
 extension PlayerViewModel {
     private static let seekFeedbackDisplayDuration: Duration = .milliseconds(325)
+    private static let markerSkipPadding: TimeInterval = 0.5
 
     func startSync() {
         syncTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
@@ -48,7 +49,7 @@ extension PlayerViewModel {
     func skipActiveMarker() {
         guard let marker = activeSkipMarker else { return }
 
-        let targetTime = TimeInterval(marker.endTimeOffset) / 1000.0
+        let targetTime = (TimeInterval(marker.endTimeOffset) / 1000.0) + Self.markerSkipPadding
         seek(to: targetTime, revealControls: true)
     }
 

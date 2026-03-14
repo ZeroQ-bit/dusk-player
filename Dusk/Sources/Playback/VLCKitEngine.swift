@@ -11,6 +11,11 @@ import VLCKit
 @MainActor
 @Observable
 final class VLCKitEngine: NSObject, PlaybackEngine {
+    private static let seekSettleDelay: Duration = .milliseconds(150)
+    private static let seekRetryDelay: Duration = .milliseconds(450)
+    private static let pendingSeekTolerance: TimeInterval = 1.0
+    private static let pendingSeekStaleUpdateWindow: TimeInterval = 1.5
+
     private(set) var state: PlaybackState = .idle
     private(set) var currentTime: TimeInterval = 0
     private(set) var duration: TimeInterval = 0
@@ -29,6 +34,9 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
     private var hasAppliedStartPosition = false
     private var hasReportedPlaybackEnded = false
     private var suppressPlaybackEndedEvent = false
+    private var pendingSeekTarget: TimeInterval?
+    private var pendingSeekStartedAt: Date?
+    @ObservationIgnored nonisolated(unsafe) private var seekVerificationTask: Task<Void, Never>?
 
     override init() {
         let player = VLCMediaPlayer()
@@ -60,9 +68,12 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
         }
         player.delegate = self
         player.drawable = renderHost
+        player.timeChangeUpdateInterval = 0.25
+        player.minimalTimePeriod = 250_000
     }
 
     deinit {
+        seekVerificationTask?.cancel()
         mediaPlayer.stop()
         mediaPlayer.delegate = nil
         mediaPlayer.drawable = nil
@@ -80,6 +91,7 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
         hasAppliedStartPosition = false
         hasReportedPlaybackEnded = false
         suppressPlaybackEndedEvent = false
+        clearPendingSeek()
         pendingStartPosition = startPosition
         availableSubtitleTracks = []
         availableAudioTracks = []
@@ -106,11 +118,14 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
     }
 
     func pause() {
+        seekVerificationTask?.cancel()
+        seekVerificationTask = nil
         mediaPlayer.pause()
         syncPictureInPictureState()
     }
 
     func stop() {
+        clearPendingSeek()
         suppressPlaybackEndedEvent = true
         mediaPlayer.stop()
         state = .stopped
@@ -126,9 +141,20 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
             clampedPosition = max(position, 0)
         }
 
-        let ms = Int32(clampedPosition * 1000)
-        mediaPlayer.time = VLCTime(int: ms)
+        pendingSeekTarget = clampedPosition
+        pendingSeekStartedAt = Date()
         currentTime = clampedPosition
+        let shouldResumePlayback = mediaPlayer.isPlaying
+
+        if shouldResumePlayback && mediaPlayer.canPause {
+            mediaPlayer.pause()
+        }
+
+        applySeek(to: clampedPosition)
+        scheduleSeekVerification(
+            target: clampedPosition,
+            resumePlayback: shouldResumePlayback
+        )
         syncPictureInPictureState()
     }
 
@@ -186,6 +212,7 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
         case .stopped:
             isBuffering = false
             state = .stopped
+            clearPendingSeek()
 
             if !suppressPlaybackEndedEvent, shouldTreatCurrentStopAsPlaybackEnded {
                 currentTime = max(currentTime, duration)
@@ -201,6 +228,7 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
             isBuffering = false
             state = .error
             error = .unknown("VLCKit playback error")
+            clearPendingSeek()
 
         @unknown default:
             break
@@ -211,9 +239,13 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
     }
 
     fileprivate func updateTime(timeMs: Int32, lengthMs: Int32) {
-        currentTime = max(0, TimeInterval(timeMs) / 1000.0)
+        let updatedTime = max(0, TimeInterval(timeMs) / 1000.0)
         if lengthMs > 0 {
             duration = TimeInterval(lengthMs) / 1000.0
+        }
+
+        if shouldAcceptUpdatedTime(updatedTime) {
+            currentTime = updatedTime
         }
         syncPictureInPictureState()
     }
@@ -241,6 +273,90 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
         media.addOption(":freetype-shadow-color=#000000")
         media.addOption(":freetype-shadow-opacity=80")
         media.addOption(":freetype-shadow-distance=1")
+    }
+
+    private func applySeek(to position: TimeInterval) {
+        if duration > 0 {
+            let normalizedPosition = min(max(position / duration, 0), 1)
+            if normalizedPosition.isFinite {
+                mediaPlayer.position = normalizedPosition
+            }
+        }
+
+        let targetMs = Int(position * 1000.0)
+        mediaPlayer.time = VLCTime(int: Int32(clamping: targetMs))
+    }
+
+    private func scheduleSeekVerification(target: TimeInterval, resumePlayback: Bool) {
+        seekVerificationTask?.cancel()
+        seekVerificationTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: Self.seekSettleDelay)
+            } catch {
+                return
+            }
+
+            guard let self, !Task.isCancelled else { return }
+
+            if self.shouldRetrySeek(toward: target) {
+                self.applySeek(to: target)
+            }
+
+            if resumePlayback {
+                self.mediaPlayer.play()
+            }
+
+            do {
+                try await Task.sleep(for: Self.seekRetryDelay)
+            } catch {
+                return
+            }
+
+            guard !Task.isCancelled else { return }
+
+            if self.shouldRetrySeek(toward: target) {
+                self.applySeek(to: target)
+            }
+        }
+    }
+
+    private func shouldRetrySeek(toward target: TimeInterval) -> Bool {
+        guard let pendingSeekTarget else { return false }
+        guard abs(pendingSeekTarget - target) <= Self.pendingSeekTolerance else { return false }
+        return !hasReachedPendingSeekTarget(using: observedPlayerTime)
+    }
+
+    private func shouldAcceptUpdatedTime(_ updatedTime: TimeInterval) -> Bool {
+        guard pendingSeekTarget != nil else { return true }
+
+        if hasReachedPendingSeekTarget(using: updatedTime) {
+            clearPendingSeek()
+            return true
+        }
+
+        let elapsed = pendingSeekStartedAt.map { Date().timeIntervalSince($0) } ?? .greatestFiniteMagnitude
+        if elapsed < Self.pendingSeekStaleUpdateWindow {
+            return false
+        }
+
+        clearPendingSeek()
+        return true
+    }
+
+    private func hasReachedPendingSeekTarget(using updatedTime: TimeInterval) -> Bool {
+        guard let pendingSeekTarget else { return true }
+        return abs(updatedTime - pendingSeekTarget) <= Self.pendingSeekTolerance
+    }
+
+    private var observedPlayerTime: TimeInterval {
+        max(0, TimeInterval(mediaPlayer.time.intValue) / 1000.0)
+    }
+
+    private func clearPendingSeek() {
+        pendingSeekTarget = nil
+        pendingSeekStartedAt = nil
+        seekVerificationTask?.cancel()
+        seekVerificationTask = nil
     }
 
     private func refreshTracks() {

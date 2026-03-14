@@ -242,7 +242,16 @@ struct PlayerUpNextOverlayView: View {
     }
 
     private var primaryTitle: String {
-        presentation.shouldAutoplay ? presentation.episode.title : "Are You Still Watching?"
+        if presentation.shouldAutoplay {
+            return presentation.episode.title
+        }
+
+        switch presentation.source {
+        case .playbackEnded:
+            return "Are You Still Watching?"
+        case .creditsSkipped:
+            return "Up Next"
+        }
     }
 
     private var manualPromptMessage: String {
@@ -252,7 +261,12 @@ struct PlayerUpNextOverlayView: View {
             return "Autoplay paused after \(episodeLimit) \(episodeLabel). Start the next episode when you're ready."
         }
 
-        return "Playback finished. Start the next episode when you're ready."
+        switch presentation.source {
+        case .playbackEnded:
+            return "Playback finished. Start the next episode when you're ready."
+        case .creditsSkipped:
+            return "Credits skipped. Start the next episode when you're ready."
+        }
     }
 
     private func countdownCard(label: String, progress: Double?) -> some View {
