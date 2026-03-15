@@ -13,6 +13,7 @@ struct HomeView: View {
     @State private var currentHeroIndex = 0
     @State private var heroRotationRevision = 0
     @State private var heroRotationProgress = 0.0
+    @State private var isHeroContextMenuPresented = false
 
     private let heroRotationInterval: UInt64 = 5_000_000_000
 
@@ -261,6 +262,13 @@ struct HomeView: View {
                 detailsRoute: AppNavigationRoute.destination(for: item),
                 detailsLabel: heroDetailsLabel(for: item)
             )
+            .onAppear {
+                isHeroContextMenuPresented = true
+            }
+            .onDisappear {
+                isHeroContextMenuPresented = false
+                restartHeroRotation()
+            }
         }
     }
 
@@ -388,7 +396,8 @@ struct HomeView: View {
     private func rotateHeroIfNeeded() async {
         guard heroItemIDs.count > 1,
               !accessibilityReduceMotion,
-              scenePhase == .active else {
+              scenePhase == .active,
+              !isHeroContextMenuPresented else {
             await MainActor.run {
                 heroRotationProgress = 0
             }
@@ -500,7 +509,8 @@ struct HomeView: View {
             heroItemIDs.joined(separator: "|"),
             String(heroRotationRevision),
             String(accessibilityReduceMotion),
-            String(scenePhase == .active)
+            String(scenePhase == .active),
+            String(isHeroContextMenuPresented)
         ].joined(separator: "::")
     }
 
