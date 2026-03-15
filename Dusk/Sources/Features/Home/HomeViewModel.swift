@@ -97,6 +97,86 @@ final class HomeViewModel {
         return item.year.map(String.init)
     }
 
+    func heroItems() -> [PlexItem] {
+        continueWatching
+    }
+
+    func heroEpisodeTitle(for item: PlexItem) -> String? {
+        guard item.type == .episode else { return nil }
+        return item.title == displayTitle(for: item) ? nil : item.title
+    }
+
+    func heroBackgroundURL(for item: PlexItem, width: Int, height: Int) -> URL? {
+        plexService.imageURL(for: heroBackgroundPath(for: item), width: width, height: height)
+    }
+
+    func heroMetadata(for item: PlexItem) -> [String] {
+        var parts: [String] = []
+
+        switch item.type {
+        case .episode:
+            if let label = MediaTextFormatter.seasonEpisodeLabel(
+                season: item.parentIndex,
+                episode: item.index
+            ) {
+                parts.append(label)
+            }
+        case .movie:
+            if let year = item.year {
+                parts.append(String(year))
+            }
+        default:
+            break
+        }
+
+        if let durationText = heroDurationText(for: item) {
+            parts.append(durationText)
+        }
+
+        return parts
+    }
+
+    func heroSummary(for item: PlexItem) -> String? {
+        guard let summary = item.summary?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !summary.isEmpty else {
+            return nil
+        }
+
+        return summary
+    }
+
+    func heroProgressLabel(for item: PlexItem) -> String? {
+        guard let duration = item.duration, duration > 0 else { return nil }
+
+        if let offset = item.viewOffset, offset > 0 {
+            let resume = MediaTextFormatter.playbackDuration(milliseconds: offset)
+            let remaining = MediaTextFormatter.playbackDuration(
+                milliseconds: max(duration - offset, 0)
+            )
+
+            switch (resume, remaining) {
+            case let (resume?, remaining?) where !remaining.isEmpty:
+                return "Resume from \(resume) • \(remaining) left"
+            case let (resume?, _):
+                return "Resume from \(resume)"
+            default:
+                return nil
+            }
+        }
+
+        return MediaTextFormatter.playbackDuration(milliseconds: duration)
+    }
+
+    func heroPrimaryActionTitle(for item: PlexItem) -> String {
+        if let offset = item.viewOffset,
+           offset > 0,
+           let resumeText = MediaTextFormatter.playbackDuration(milliseconds: offset) {
+            return "Resume from \(resumeText)"
+        }
+
+        return "Play"
+    }
+
     func visibleItems(in hub: PlexHub) -> [PlexItem] {
         hub.items.filter { !shouldHideHomeItem($0) }
     }
@@ -179,6 +259,31 @@ final class HomeViewModel {
             return true
         default:
             return normalizedKey.contains("/playlists/")
+        }
+    }
+
+    private func heroDurationText(for item: PlexItem) -> String? {
+        guard let duration = item.duration, duration > 0 else { return nil }
+
+        if let offset = item.viewOffset, offset > 0 {
+            let remaining = max(duration - offset, 0)
+            guard let remainingText = MediaTextFormatter.playbackDuration(milliseconds: remaining) else {
+                return nil
+            }
+            return remaining > 0 ? "\(remainingText) left" : remainingText
+        }
+
+        return MediaTextFormatter.playbackDuration(milliseconds: duration)
+    }
+
+    private func heroBackgroundPath(for item: PlexItem) -> String? {
+        switch item.type {
+        case .episode:
+            return item.grandparentArt ?? item.art ?? item.banner ?? item.thumb ?? item.grandparentThumb
+        case .season:
+            return item.art ?? item.banner ?? item.thumb ?? item.parentThumb
+        default:
+            return item.preferredLandscapePath
         }
     }
 }

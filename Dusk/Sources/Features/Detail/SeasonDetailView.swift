@@ -237,7 +237,7 @@ struct SeasonDetailView: View {
         let posterWidth: CGFloat = 124
 
         if let posterURL = viewModel.posterURL(width: 124, height: 186) {
-            AsyncImage(url: posterURL) { phase in
+            DuskAsyncImage(url: posterURL) { phase in
                 switch phase {
                 case .success(let image):
                     image

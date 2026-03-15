@@ -10,7 +10,7 @@ struct EpisodeRowView: View {
             // Thumbnail
             ZStack(alignment: .bottomLeading) {
                 if let url = thumbURL {
-                    AsyncImage(url: url) { phase in
+                    DuskAsyncImage(url: url) { phase in
                         switch phase {
                         case .success(let image):
                             image

@@ -24,6 +24,8 @@ This is **Dusk**, a native Swift/SwiftUI Plex client for Apple platforms. See `S
 
 The Xcode project is generated via [xcodegen](https://github.com/yonaskolb/XcodeGen). `project.yml` remains the source of truth; regenerate `Dusk.xcodeproj` when project settings change.
 
+Important: if you add, remove, or rename any source file under `Dusk/Sources`, run `xcodegen generate` before finishing. The checked-in `Dusk.xcodeproj` can otherwise be stale, which causes new Swift files to appear as "Cannot find in scope" even though they exist on disk.
+
 ```bash
 # 1. Generate the Xcode project
 brew install xcodegen  # if not already installed

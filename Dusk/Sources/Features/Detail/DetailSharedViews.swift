@@ -8,7 +8,7 @@ struct ActorCreditCard: View {
         NavigationLink(value: AppNavigationRoute.person(person)) {
             VStack(spacing: 8) {
                 if let thumbPath = person.thumb {
-                    AsyncImage(url: plexService.imageURL(for: thumbPath, width: 72, height: 72)) { phase in
+                    DuskAsyncImage(url: plexService.imageURL(for: thumbPath, width: 72, height: 72)) { phase in
                         switch phase {
                         case .success(let image):
                             image

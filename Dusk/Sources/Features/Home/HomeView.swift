@@ -6,50 +6,70 @@ import UIKit
 struct HomeView: View {
     @Environment(PlexService.self) private var plexService
     @Environment(PlaybackCoordinator.self) private var playback
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     @Binding var path: NavigationPath
     @State private var viewModel: HomeViewModel?
+    @State private var currentHeroIndex = 0
+    @State private var heroRotationRevision = 0
+    @State private var heroRotationProgress = 0.0
 
-    private let continueWatchingCardWidth: CGFloat = 280
-    private let continueWatchingAspectRatio: CGFloat = 16.0 / 9.0
+    private let heroRotationInterval: UInt64 = 5_000_000_000
 
     var body: some View {
-        NavigationStack(path: $path) {
-            ZStack {
-                Color.duskBackground.ignoresSafeArea()
+        applyNavigationChrome(
+            to: NavigationStack(path: $path) {
+                ZStack {
+                    Color.duskBackground.ignoresSafeArea()
 
-                if let viewModel {
-                    if viewModel.isLoading, viewModel.hubs.isEmpty {
-                        FeatureLoadingView()
-                    } else if let error = viewModel.error, viewModel.hubs.isEmpty {
-                        FeatureErrorView(message: error) {
-                            Task { await viewModel.load(maxRecentlyAddedItems: recentlyAddedInlineItemLimit) }
+                    if let viewModel {
+                        let hasHomeContent = !viewModel.hubs.isEmpty || !viewModel.continueWatching.isEmpty
+
+                        if viewModel.isLoading, !hasHomeContent {
+                            FeatureLoadingView()
+                        } else if let error = viewModel.error, !hasHomeContent {
+                            FeatureErrorView(message: error) {
+                                Task { await viewModel.load(maxRecentlyAddedItems: recentlyAddedInlineItemLimit) }
+                            }
+                        } else {
+                            contentView(viewModel)
                         }
-                    } else {
-                        contentView(viewModel)
                     }
                 }
-            }
-            .task(id: plexService.connectedServer?.clientIdentifier) {
-                if viewModel == nil {
-                    viewModel = HomeViewModel(plexService: plexService)
+                .task(id: plexService.connectedServer?.clientIdentifier) {
+                    if viewModel == nil {
+                        viewModel = HomeViewModel(plexService: plexService)
+                    }
+                    await viewModel?.load(maxRecentlyAddedItems: recentlyAddedInlineItemLimit)
                 }
-                await viewModel?.load(maxRecentlyAddedItems: recentlyAddedInlineItemLimit)
-            }
-            .onAppear {
-                guard viewModel != nil else { return }
-                Task { await viewModel?.load(maxRecentlyAddedItems: recentlyAddedInlineItemLimit) }
-            }
-            .onChange(of: playback.showPlayer) { _, isShowing in
-                if !isShowing {
+                .onAppear {
+                    guard viewModel != nil else { return }
                     Task { await viewModel?.load(maxRecentlyAddedItems: recentlyAddedInlineItemLimit) }
                 }
+                .onChange(of: playback.showPlayer) { _, isShowing in
+                    if !isShowing {
+                        Task { await viewModel?.load(maxRecentlyAddedItems: recentlyAddedInlineItemLimit) }
+                    }
+                }
+                .refreshable {
+                    await viewModel?.load(maxRecentlyAddedItems: recentlyAddedInlineItemLimit)
+                }
+                .duskAppNavigationDestinations()
+            },
+            showsHero: showsCinematicHero
+        )
+        .onChange(of: heroItemIDs) { _, ids in
+            guard !ids.isEmpty else {
+                currentHeroIndex = 0
+                return
             }
-            .refreshable {
-                await viewModel?.load(maxRecentlyAddedItems: recentlyAddedInlineItemLimit)
+
+            if currentHeroIndex >= ids.count {
+                currentHeroIndex = 0
             }
-            .duskNavigationTitle("Home")
-            .duskNavigationBarTitleDisplayModeLarge()
-            .duskAppNavigationDestinations()
+        }
+        .task(id: heroRotationSeed) {
+            await rotateHeroIfNeeded()
         }
     }
 
@@ -57,33 +77,40 @@ struct HomeView: View {
 
     @ViewBuilder
     private func contentView(_ vm: HomeViewModel) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                if showsHomeServerSubtitle, let serverName = plexService.connectedServer?.name {
-                    homeSubtitle(serverName)
-                        .padding(.bottom, 12)
-                }
+        let heroItems = vm.heroItems()
 
-                LazyVStack(alignment: .leading, spacing: 18) {
-                    // Continue Watching (Task B) — top of home
-                    if !vm.continueWatching.isEmpty {
-                        continueWatchingSection(vm)
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    if !heroItems.isEmpty {
+                        cinematicHeroSection(
+                            vm,
+                            items: heroItems,
+                            containerSize: geometry.size,
+                            topInset: geometry.safeAreaInsets.top
+                        )
+                    } else if showsHomeServerSubtitle, let serverName = plexService.connectedServer?.name {
+                        homeSubtitle(serverName)
+                            .padding(.bottom, 12)
                     }
 
-                    // Hub carousels (Task A) — Recently Added, etc.
-                    ForEach(vm.hubs) { hub in
-                        let items = vm.inlineItems(
-                            in: hub,
-                            maxRecentlyAddedItems: recentlyAddedInlineItemLimit
-                        )
-                        if !items.isEmpty {
-                            hubSection(hub, items: items, vm: vm)
+                    LazyVStack(alignment: .leading, spacing: 18) {
+                        ForEach(vm.hubs) { hub in
+                            let items = vm.inlineItems(
+                                in: hub,
+                                maxRecentlyAddedItems: recentlyAddedInlineItemLimit
+                            )
+                            if !items.isEmpty {
+                                hubSection(hub, items: items, vm: vm)
+                            }
                         }
                     }
+                    .padding(.top, heroItems.isEmpty ? 0 : 24)
                 }
+                .padding(.top, heroItems.isEmpty ? (showsHomeServerSubtitle ? -10 : 16) : -geometry.safeAreaInsets.top)
+                .padding(.bottom, 24)
             }
-            .padding(.top, showsHomeServerSubtitle ? -10 : 16)
-            .padding(.bottom, 24)
+            .scrollIndicators(.hidden)
         }
         .safeAreaInset(edge: .bottom) {
             Color.clear
@@ -91,81 +118,167 @@ struct HomeView: View {
         }
     }
 
-    // MARK: - Continue Watching
+    // MARK: - Hero
 
     @ViewBuilder
-    private func continueWatchingSection(_ vm: HomeViewModel) -> some View {
-        let imageWidth = Int(continueWatchingCardWidth.rounded(.up))
-        let imageHeight = Int((continueWatchingCardWidth / continueWatchingAspectRatio).rounded(.up))
+    private func cinematicHeroSection(
+        _ vm: HomeViewModel,
+        items: [PlexItem],
+        containerSize: CGSize,
+        topInset: CGFloat
+    ) -> some View {
+        let index = resolvedHeroIndex(for: items)
+        let item = items[index]
+        let heroWidth = containerSize.width
+        let heroHeight = min(max(containerSize.height * 0.72, 520), 760) + topInset
+        let backdropWidth = Int(heroWidth.rounded(.up))
+        let backdropHeight = Int(heroHeight.rounded(.up))
+        let contentWidth = min(max(heroWidth - 40, 0), 620)
+        let metadata = vm.heroMetadata(for: item)
 
-        MediaCarousel(title: "Continue Watching") {
-            ForEach(vm.continueWatching) { item in
-                #if os(tvOS)
-                VStack(alignment: .leading, spacing: 6) {
-                    Button {
-                        play(item)
-                    } label: {
-                        PosterArtwork(
-                            imageURL: vm.landscapeImageURL(for: item, width: imageWidth, height: imageHeight),
-                            progress: vm.progress(for: item),
-                            width: continueWatchingCardWidth,
-                            imageAspectRatio: continueWatchingAspectRatio,
-                            showsPlayOverlay: true
-                        )
+        ZStack(alignment: .bottomLeading) {
+            DetailHeroBackdrop(
+                imageURL: vm.heroBackgroundURL(
+                    for: item,
+                    width: backdropWidth,
+                    height: backdropHeight
+                ),
+                height: heroHeight
+            )
+
+            ZStack {
+                LinearGradient(
+                    colors: [
+                        Color.black.opacity(0.18),
+                        Color.black.opacity(0.86)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+
+                LinearGradient(
+                    colors: [
+                        Color.black.opacity(0.86),
+                        Color.black.opacity(0.48),
+                        .clear
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+
+                LinearGradient(
+                    colors: [
+                        .clear,
+                        Color.duskBackground.opacity(0.26),
+                        Color.duskBackground
+                    ],
+                    startPoint: .center,
+                    endPoint: .bottom
+                )
+            }
+            .allowsHitTesting(false)
+
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(vm.displayTitle(for: item))
+                        .font(.system(size: 42, weight: .heavy, design: .rounded))
+                        .foregroundStyle(Color.white)
+                        .lineLimit(3)
+                        .minimumScaleFactor(0.7)
+                        .shadow(color: .black.opacity(0.24), radius: 10, y: 4)
+                        .frame(maxWidth: contentWidth, alignment: .leading)
+
+                    if let episodeTitle = vm.heroEpisodeTitle(for: item) {
+                        Text(episodeTitle)
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(Color.white.opacity(0.88))
+                            .lineLimit(2)
+                            .frame(maxWidth: contentWidth, alignment: .leading)
                     }
-                    .buttonStyle(.plain)
-                    .duskSuppressTVOSButtonChrome()
 
-                    PosterCardText(
-                        title: vm.displayTitle(for: item),
-                        subtitle: vm.displaySubtitle(for: item),
-                        width: continueWatchingCardWidth
-                    )
+                    if !metadata.isEmpty {
+                        Text(metadata.joined(separator: " · "))
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(Color.white.opacity(0.76))
+                            .lineLimit(2)
+                            .frame(maxWidth: contentWidth, alignment: .leading)
+                    }
                 }
-                .frame(width: continueWatchingCardWidth, alignment: .topLeading)
-                .contextMenu {
-                    PlexItemContextMenuContent(
-                        item: item,
-                        onMarkWatched: {
-                            Task { await vm.setWatched(true, for: item) }
-                        },
-                        onMarkUnwatched: {
-                            Task { await vm.setWatched(false, for: item) }
-                        },
-                        detailsRoute: AppNavigationRoute.destination(for: item),
-                        detailsLabel: detailsLabel(for: item)
-                    )
+
+                if let summary = vm.heroSummary(for: item) {
+                    Text(summary)
+                        .font(.body)
+                        .foregroundStyle(Color.white.opacity(0.84))
+                        .lineLimit(3)
+                        .lineSpacing(4)
+                        .frame(maxWidth: contentWidth, alignment: .leading)
                 }
-                #else
+
+                heroActionRow(vm, item: item)
+
+                if items.count > 1 {
+                    heroPager(items: items, currentIndex: index)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 28)
+            .padding(.top, topInset + 64)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+        }
+        .frame(height: heroHeight)
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 20)
+                .onEnded { value in
+                    handleHeroDrag(value.translation)
+                }
+        )
+    }
+
+    @ViewBuilder
+    private func heroActionRow(_ vm: HomeViewModel, item: PlexItem) -> some View {
+        Button {
+            restartHeroRotation()
+            play(item)
+        } label: {
+            HomeHeroActionButtonLabel(
+                title: vm.heroPrimaryActionTitle(for: item),
+                systemImage: "play.fill"
+            )
+        }
+        .buttonStyle(.plain)
+        .duskSuppressTVOSButtonChrome()
+        .contextMenu {
+            PlexItemContextMenuContent(
+                item: item,
+                onMarkWatched: {
+                    Task { await vm.setWatched(true, for: item) }
+                },
+                onMarkUnwatched: {
+                    Task { await vm.setWatched(false, for: item) }
+                },
+                detailsRoute: AppNavigationRoute.destination(for: item),
+                detailsLabel: heroDetailsLabel(for: item)
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func heroPager(items: [PlexItem], currentIndex: Int) -> some View {
+        HStack(spacing: 8) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                 Button {
-                    play(item)
+                    selectHero(at: index)
                 } label: {
-                    PosterCard(
-                        imageURL: vm.landscapeImageURL(for: item, width: imageWidth, height: imageHeight),
-                        title: vm.displayTitle(for: item),
-                        subtitle: vm.displaySubtitle(for: item),
-                        progress: vm.progress(for: item),
-                        width: continueWatchingCardWidth,
-                        imageAspectRatio: continueWatchingAspectRatio,
-                        showsPlayOverlay: true
+                    HomeHeroPagerPill(
+                        isActive: index == currentIndex,
+                        progress: index == currentIndex ? heroRotationProgress : 0
                     )
+                    .accessibilityLabel(Text(vmDisplayLabel(for: item)))
                 }
                 .buttonStyle(.plain)
                 .duskSuppressTVOSButtonChrome()
-                .contextMenu {
-                    PlexItemContextMenuContent(
-                        item: item,
-                        onMarkWatched: {
-                            Task { await vm.setWatched(true, for: item) }
-                        },
-                        onMarkUnwatched: {
-                            Task { await vm.setWatched(false, for: item) }
-                        },
-                        detailsRoute: AppNavigationRoute.destination(for: item),
-                        detailsLabel: detailsLabel(for: item)
-                    )
-                }
-                #endif
             }
         }
     }
@@ -252,6 +365,110 @@ struct HomeView: View {
         }
     }
 
+    // MARK: - Navigation
+
+    @ViewBuilder
+    private func applyNavigationChrome<Content: View>(to content: Content, showsHero: Bool) -> some View {
+        if showsHero {
+            content
+                .duskNavigationTitle("")
+                .duskNavigationBarTitleDisplayModeInline()
+                .toolbarColorScheme(.dark, for: .navigationBar)
+                .toolbarBackground(.hidden, for: .navigationBar)
+        } else {
+            content
+                .duskNavigationTitle("Home")
+                .duskNavigationBarTitleDisplayModeLarge()
+                .toolbarBackground(.visible, for: .navigationBar)
+        }
+    }
+
+    // MARK: - Rotation
+
+    private func rotateHeroIfNeeded() async {
+        guard heroItemIDs.count > 1,
+              !accessibilityReduceMotion,
+              scenePhase == .active else {
+            await MainActor.run {
+                heroRotationProgress = 0
+            }
+            return
+        }
+
+        while !Task.isCancelled {
+            await MainActor.run {
+                heroRotationProgress = 0
+                withAnimation(.linear(duration: Double(heroRotationInterval) / 1_000_000_000)) {
+                    heroRotationProgress = 1
+                }
+            }
+
+            do {
+                try await Task.sleep(nanoseconds: heroRotationInterval)
+            } catch {
+                await MainActor.run {
+                    heroRotationProgress = 0
+                }
+                return
+            }
+
+            guard !Task.isCancelled else { return }
+
+            await MainActor.run {
+                let heroCount = heroItemIDs.count
+                guard heroCount > 1 else { return }
+
+                withAnimation(.easeInOut(duration: 0.7)) {
+                    currentHeroIndex = (currentHeroIndex + 1) % heroCount
+                }
+            }
+        }
+    }
+
+    private func selectHero(at index: Int) {
+        guard index != currentHeroIndex else {
+            restartHeroRotation()
+            return
+        }
+
+        restartHeroRotation()
+        withAnimation(.easeInOut(duration: 0.5)) {
+            currentHeroIndex = index
+        }
+    }
+
+    private func restartHeroRotation() {
+        heroRotationProgress = 0
+        heroRotationRevision += 1
+    }
+
+    private func handleHeroDrag(_ translation: CGSize) {
+        guard heroItemIDs.count > 1 else { return }
+        guard abs(translation.width) > abs(translation.height),
+              abs(translation.width) > 44 else {
+            return
+        }
+
+        restartHeroRotation()
+
+        let heroCount = heroItemIDs.count
+        let nextIndex: Int
+        if translation.width < 0 {
+            nextIndex = (currentHeroIndex + 1) % heroCount
+        } else {
+            nextIndex = (currentHeroIndex - 1 + heroCount) % heroCount
+        }
+
+        withAnimation(.easeInOut(duration: 0.45)) {
+            currentHeroIndex = nextIndex
+        }
+    }
+
+    private func resolvedHeroIndex(for items: [PlexItem]) -> Int {
+        guard !items.isEmpty else { return 0 }
+        return min(currentHeroIndex, items.count - 1)
+    }
+
     // MARK: - Error
 
     private func homeSubtitle(_ serverName: String) -> some View {
@@ -270,6 +487,23 @@ struct HomeView: View {
         #endif
     }
 
+    private var showsCinematicHero: Bool {
+        !(viewModel?.heroItems().isEmpty ?? true)
+    }
+
+    private var heroItemIDs: [String] {
+        viewModel?.heroItems().map(\.ratingKey) ?? []
+    }
+
+    private var heroRotationSeed: String {
+        [
+            heroItemIDs.joined(separator: "|"),
+            String(heroRotationRevision),
+            String(accessibilityReduceMotion),
+            String(scenePhase == .active)
+        ].joined(separator: "::")
+    }
+
     private var recentlyAddedInlineItemLimit: Int {
         #if os(iOS)
         UIDevice.current.userInterfaceIdiom == .pad ? 15 : 10
@@ -284,14 +518,74 @@ struct HomeView: View {
         }
     }
 
-    private func detailsLabel(for item: PlexItem) -> String {
+    private func vmDisplayLabel(for item: PlexItem) -> String {
+        guard let viewModel else { return item.title }
+        return viewModel.displayTitle(for: item)
+    }
+
+    private func heroDetailsLabel(for item: PlexItem) -> String {
         switch item.type {
         case .episode:
-            "Go to Episode"
+            return "Go to Episode"
+        case .season:
+            return "Go to Season"
+        case .show:
+            return "Go to Show"
         case .movie:
-            "Go to Movie"
+            return "Go to Movie"
         default:
-            "View Details"
+            return "View Details"
+        }
+    }
+
+}
+
+private struct HomeHeroActionButtonLabel: View {
+    let title: String
+    let systemImage: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.headline.weight(.semibold))
+
+            Text(title)
+                .font(.headline.weight(.semibold))
+                .lineLimit(1)
+        }
+        .foregroundStyle(Color.white)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .background(Color.duskAccent, in: Capsule())
+        .overlay(
+            Capsule()
+                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.16), radius: 10, y: 4)
+    }
+}
+
+private struct HomeHeroPagerPill: View {
+    let isActive: Bool
+    let progress: Double
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            Capsule()
+                .fill(isActive ? Color.white.opacity(0.24) : Color.white.opacity(0.28))
+                .frame(width: isActive ? 28 : 10, height: 10)
+
+            if isActive {
+                Capsule()
+                    .fill(Color.duskAccent)
+                    .frame(width: 28 * min(max(progress, 0), 1), height: 10)
+            }
+        }
+        .overlay {
+            if isActive {
+                Capsule()
+                    .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
+            }
         }
     }
 }

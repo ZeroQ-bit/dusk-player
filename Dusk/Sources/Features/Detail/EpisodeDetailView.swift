@@ -91,7 +91,7 @@ struct EpisodeDetailView: View {
 
             HStack(alignment: .bottom, spacing: 16) {
                 if let posterURL = viewModel.posterURL(width: 120, height: 180) {
-                    AsyncImage(url: posterURL) { phase in
+                    DuskAsyncImage(url: posterURL) { phase in
                         switch phase {
                         case .success(let image):
                             image

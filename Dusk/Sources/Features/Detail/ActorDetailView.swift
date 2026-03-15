@@ -102,7 +102,7 @@ struct ActorDetailView: View {
     @ViewBuilder
     private var personArtwork: some View {
         if let imageURL = viewModel.personImageURL(size: 120) {
-            AsyncImage(url: imageURL) { phase in
+            DuskAsyncImage(url: imageURL) { phase in
                 switch phase {
                 case .success(let image):
                     image

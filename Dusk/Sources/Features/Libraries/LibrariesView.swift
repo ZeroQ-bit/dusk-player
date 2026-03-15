@@ -98,7 +98,7 @@ private struct LibraryRowContent: View {
         HStack(spacing: 16) {
             ZStack {
                 if let url = vm.artURL(for: library, width: 64, height: 64) {
-                    AsyncImage(url: url) { phase in
+                    DuskAsyncImage(url: url) { phase in
                         switch phase {
                         case .success(let image):
                             image

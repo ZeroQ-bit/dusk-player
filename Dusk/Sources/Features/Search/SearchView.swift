@@ -136,7 +136,7 @@ struct SearchView: View {
             ? CGSize(width: 56, height: 56)
             : CGSize(width: 50, height: 75)
 
-        AsyncImage(
+        DuskAsyncImage(
             url: viewModel?.imageURL(
                 for: item.preferredPosterPath,
                 width: Int(imageSize.width.rounded(.up)),

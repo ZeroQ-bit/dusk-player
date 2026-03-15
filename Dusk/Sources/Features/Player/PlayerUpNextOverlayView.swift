@@ -97,7 +97,7 @@ struct PlayerUpNextOverlayView: View {
 
         return ZStack(alignment: .bottomLeading) {
             if let thumbnailURL {
-                AsyncImage(url: thumbnailURL) { phase in
+                DuskAsyncImage(url: thumbnailURL) { phase in
                     switch phase {
                     case .success(let image):
                         image

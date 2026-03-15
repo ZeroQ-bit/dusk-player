@@ -86,12 +86,13 @@ struct DetailHeroBackdrop: View {
                 Color.duskSurface
 
                 if let imageURL {
-                    AsyncImage(url: imageURL) { phase in
+                    DuskAsyncImage(url: imageURL) { phase in
                         switch phase {
                         case .success(let image):
                             image
                                 .resizable()
                                 .scaledToFill()
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                                 .frame(
                                     width: geometry.size.width,
                                     height: geometry.size.height,

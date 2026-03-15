@@ -12,7 +12,7 @@ struct PosterArtwork: View {
 
     var body: some View {
         ZStack {
-            AsyncImage(url: imageURL) { phase in
+            DuskAsyncImage(url: imageURL) { phase in
                 switch phase {
                 case .success(let image):
                     image

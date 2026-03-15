@@ -78,7 +78,8 @@ extension PlexService {
     }
 
     func getContinueWatching() async throws -> [PlexItem] {
-        try await fetchMetadata(path: "/library/onDeck")
+        let hubs = try await fetchHubs(path: "/hubs/continueWatching")
+        return hubs.flatMap(\.items)
     }
 
     func getHubItems(hubKey: String, start: Int = 0, size: Int? = nil) async throws -> [PlexItem] {
