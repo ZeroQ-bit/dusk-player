@@ -8,6 +8,7 @@ final class ShowDetailViewModel {
 
     private(set) var details: PlexMediaDetails?
     private(set) var seasons: [PlexSeason] = []
+    private(set) var nextEpisode: PlexEpisode?
     private(set) var isLoading = false
     private(set) var error: String?
 
@@ -84,11 +85,48 @@ final class ShowDetailViewModel {
         return Double(viewed) / Double(total)
     }
 
+    // MARK: - Play Next
+
+    var playButtonLabel: String {
+        guard let ep = nextEpisode else { return "Play" }
+        let label = MediaTextFormatter.seasonEpisodeLabel(
+            season: ep.parentIndex,
+            episode: ep.index
+        ) ?? "Episode \(ep.index ?? 1)"
+        if ep.isPartiallyWatched {
+            return "Resume · \(label)"
+        }
+        return "Play · \(label)"
+    }
+
     private func reload() async throws {
         async let detailsRequest = plexService.getMediaDetails(ratingKey: ratingKey)
         async let seasonsRequest = plexService.getSeasons(showKey: ratingKey)
         let (loadedDetails, loadedSeasons) = try await (detailsRequest, seasonsRequest)
         details = loadedDetails
         seasons = loadedSeasons.sorted { $0.index < $1.index }
+        await resolveNextEpisode()
+    }
+
+    private func resolveNextEpisode() async {
+        // Find first season that isn't fully watched
+        let targetSeason = seasons.first(where: { !$0.isFullyWatched })
+            ?? seasons.first
+
+        guard let season = targetSeason else {
+            nextEpisode = nil
+            return
+        }
+
+        do {
+            let episodes = try await plexService.getEpisodes(seasonKey: season.ratingKey)
+                .sorted { ($0.index ?? 0) < ($1.index ?? 0) }
+
+            nextEpisode = episodes.first(where: \.isPartiallyWatched)
+                ?? episodes.first(where: { !$0.isWatched })
+                ?? episodes.first
+        } catch {
+            nextEpisode = nil
+        }
     }
 }

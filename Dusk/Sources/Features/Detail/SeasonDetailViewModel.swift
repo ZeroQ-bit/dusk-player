@@ -82,6 +82,25 @@ final class SeasonDetailViewModel {
         MediaTextFormatter.progress(durationMs: episode.duration, offsetMs: episode.viewOffset)
     }
 
+    // MARK: - Play Next
+
+    /// The episode the user would most likely want to play:
+    /// first partially watched, then first unwatched, then first overall.
+    var nextEpisodeToPlay: PlexEpisode? {
+        episodes.first(where: \.isPartiallyWatched)
+            ?? episodes.first(where: { !$0.isWatched })
+            ?? episodes.first
+    }
+
+    var playButtonLabel: String {
+        guard let ep = nextEpisodeToPlay else { return "Play" }
+        let label = ep.index.map { "Episode \($0)" } ?? ep.title
+        if ep.isPartiallyWatched {
+            return "Resume · \(label)"
+        }
+        return "Play · \(label)"
+    }
+
     private func reload() async {
         isLoading = true
         error = nil

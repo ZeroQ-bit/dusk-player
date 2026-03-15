@@ -42,6 +42,12 @@ struct SeasonDetailView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     heroSection(details, topInset: geometry.safeAreaInsets.top, containerWidth: geometry.size.width)
 
+                    if viewModel.nextEpisodeToPlay != nil {
+                        actionButtons()
+                            .padding(.horizontal, horizontalPadding)
+                            .padding(.top, 20)
+                    }
+
                     if let summary = details.summary, !summary.isEmpty {
                         ExpandableSummaryText(text: summary)
                             .padding(.horizontal, horizontalPadding)
@@ -135,6 +141,27 @@ struct SeasonDetailView: View {
                 .font(.caption)
                 .foregroundStyle(Color.duskTextSecondary)
         }
+    }
+
+    @ViewBuilder
+    private func actionButtons() -> some View {
+        Button {
+            if let ep = viewModel.nextEpisodeToPlay {
+                Task { await playback.play(ratingKey: ep.ratingKey) }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "play.fill")
+                Text(viewModel.playButtonLabel)
+            }
+            .font(.headline)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(Color.duskAccent)
+            .foregroundStyle(.white)
+            .clipShape(Capsule())
+        }
+        .duskSuppressTVOSButtonChrome()
     }
 
     @ViewBuilder

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ShowDetailView: View {
     @Environment(PlexService.self) private var plexService
+    @Environment(PlaybackCoordinator.self) private var playback
     @State private var viewModel: ShowDetailViewModel
 
     private let horizontalPadding: CGFloat = 20
@@ -47,6 +48,12 @@ struct ShowDetailView: View {
                     metadataSection(details)
                         .padding(.horizontal, horizontalPadding)
                         .padding(.top, 20)
+
+                    if viewModel.nextEpisode != nil {
+                        actionButtons()
+                            .padding(.horizontal, horizontalPadding)
+                            .padding(.top, 20)
+                    }
 
                     if let summary = details.summary, !summary.isEmpty {
                         Text(summary)
@@ -197,6 +204,27 @@ struct ShowDetailView: View {
                 .font(.subheadline.monospacedDigit())
                 .foregroundStyle(Color.duskTextPrimary)
         }
+    }
+
+    @ViewBuilder
+    private func actionButtons() -> some View {
+        Button {
+            if let ep = viewModel.nextEpisode {
+                Task { await playback.play(ratingKey: ep.ratingKey) }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "play.fill")
+                Text(viewModel.playButtonLabel)
+            }
+            .font(.headline)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(Color.duskAccent)
+            .foregroundStyle(.white)
+            .clipShape(Capsule())
+        }
+        .duskSuppressTVOSButtonChrome()
     }
 
     @ViewBuilder
