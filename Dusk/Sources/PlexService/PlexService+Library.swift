@@ -5,14 +5,41 @@ extension PlexService {
         try await fetchDirectories(path: "/library/sections")
     }
 
-    func getLibraryItems(sectionId: String, start: Int = 0, size: Int = 50) async throws -> [PlexItem] {
-        try await fetchMetadata(
-            path: "/library/sections/\(sectionId)/all",
-            queryItems: [
-                URLQueryItem(name: "X-Plex-Container-Start", value: String(start)),
-                URLQueryItem(name: "X-Plex-Container-Size", value: String(size)),
-            ]
+    func getLibraryItems(
+        sectionId: String,
+        start: Int = 0,
+        size: Int = 50,
+        sort: String? = nil,
+        filters: [String: String] = [:]
+    ) async throws -> [PlexItem] {
+        var queryItems = [
+            URLQueryItem(name: "X-Plex-Container-Start", value: String(start)),
+            URLQueryItem(name: "X-Plex-Container-Size", value: String(size)),
+        ]
+
+        if let sort, !sort.isEmpty {
+            queryItems.append(URLQueryItem(name: "sort", value: sort))
+        }
+
+        queryItems.append(
+            contentsOf: filters
+                .sorted { $0.key < $1.key }
+                .map { URLQueryItem(name: $0.key, value: $0.value) }
         )
+
+        let items: [PlexItem] = try await fetchMetadata(
+            path: "/library/sections/\(sectionId)/all",
+            queryItems: queryItems
+        )
+        return items
+    }
+
+    func getLibraryFilters(sectionId: String) async throws -> [PlexLibraryFilter] {
+        try await fetchDirectories(path: "/library/sections/\(sectionId)/filters")
+    }
+
+    func getLibraryFilterValues(path: String) async throws -> [PlexLibraryFilterValue] {
+        try await fetchDirectories(path: path)
     }
 
     func getLibraryHubs(sectionId: String, count: Int = 12) async throws -> [PlexHub] {
