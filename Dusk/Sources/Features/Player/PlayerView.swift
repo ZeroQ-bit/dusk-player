@@ -1,5 +1,10 @@
 import SwiftUI
 
+enum PlayerOverlayLayout {
+    static let controlsHorizontalPadding: CGFloat = 16
+    static let skipMarkerBottomInset: CGFloat = 108
+}
+
 private struct PlayerSeekFeedbackOverlayView: View {
     let presentation: PlayerSeekFeedbackPresentation
 
@@ -258,66 +263,62 @@ private struct PlayerSessionView: View {
     }
 
     private func skipMarkerOverlay(_ marker: PlexMarker) -> some View {
-        GeometryReader { geometry in
-            VStack {
+        VStack {
+            Spacer()
+
+            HStack {
                 Spacer()
-
-                HStack {
-                    Spacer()
-                    Button {
-                        viewModel.cancelAutoSkipCountdown()
-                        if marker.isCredits {
-                            Task { @MainActor in
-                                let didPresentUpNext = await playback.skipCreditsToUpNextIfPossible()
-                                if !didPresentUpNext {
-                                    viewModel.skipActiveMarker()
-                                }
-                            }
-                        } else {
-                            viewModel.skipActiveMarker()
-                        }
-                    } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: marker.isCredits ? "forward.end.fill" : "chevron.forward.2")
-                                .font(.callout.weight(.semibold))
-
-                            Text(marker.skipButtonTitle ?? "Skip")
-                                .font(.subheadline.weight(.semibold))
-                        }
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 13)
-                        .background {
-                            Capsule().fill(.ultraThinMaterial)
-                        }
-                        .overlay(alignment: .leading) {
-                            if let progress = viewModel.autoSkipCountdownProgress {
-                                GeometryReader { buttonGeometry in
-                                    Rectangle()
-                                        .fill(.white.opacity(0.18))
-                                        .frame(width: buttonGeometry.size.width * progress)
-                                }
-                                .clipShape(Capsule())
+                Button {
+                    viewModel.cancelAutoSkipCountdown()
+                    if marker.isCredits {
+                        Task { @MainActor in
+                            let didPresentUpNext = await playback.skipCreditsToUpNextIfPossible()
+                            if !didPresentUpNext {
+                                viewModel.skipActiveMarker()
                             }
                         }
-                        .overlay {
-                            Capsule()
-                                .strokeBorder(.white.opacity(0.14), lineWidth: 1)
-                        }
-                        .shadow(color: .black.opacity(0.28), radius: 18, y: 8)
-                        .opacity(0.92)
+                    } else {
+                        viewModel.skipActiveMarker()
                     }
-                    .duskSuppressTVOSButtonChrome()
-                    .duskTVOSFocusEffectShape(Capsule())
-                }
-            }
-            .padding(.trailing, 20)
-            .padding(.bottom, max(geometry.safeAreaInsets.bottom + skipMarkerBottomInset, 24))
-        }
-        .ignoresSafeArea()
-    }
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: marker.isCredits ? "forward.end.fill" : "chevron.forward.2")
+                            .font(.callout.weight(.semibold))
 
-    private var skipMarkerBottomInset: CGFloat { 124 }
+                        Text(marker.skipButtonTitle ?? "Skip")
+                            .font(.subheadline.weight(.semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 13)
+                    .background {
+                        Capsule().fill(.ultraThinMaterial)
+                    }
+                    .overlay(alignment: .leading) {
+                        if let progress = viewModel.autoSkipCountdownProgress {
+                            GeometryReader { buttonGeometry in
+                                Rectangle()
+                                    .fill(.white.opacity(0.18))
+                                    .frame(width: buttonGeometry.size.width * progress)
+                            }
+                            .clipShape(Capsule())
+                        }
+                    }
+                    .overlay {
+                        Capsule()
+                            .strokeBorder(.white.opacity(0.14), lineWidth: 1)
+                    }
+                    .shadow(color: .black.opacity(0.28), radius: 18, y: 8)
+                    .opacity(0.92)
+                }
+                .duskSuppressTVOSButtonChrome()
+                .duskTVOSFocusEffectShape(Capsule())
+            }
+        }
+        .padding(.horizontal, PlayerOverlayLayout.controlsHorizontalPadding)
+        .padding(.bottom, max(PlayerOverlayLayout.skipMarkerBottomInset, 24))
+        .ignoresSafeArea(edges: .bottom)
+    }
 
     private func errorOverlay(_ error: PlaybackError) -> some View {
         VStack(spacing: 16) {

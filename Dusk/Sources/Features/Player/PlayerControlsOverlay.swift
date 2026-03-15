@@ -36,7 +36,8 @@ struct PlayerControlsOverlay: View {
                     Spacer()
                     bottomBar(showsTrackLabels: showsTrackLabels)
                 }
-                .padding()
+                .padding(.horizontal, PlayerOverlayLayout.controlsHorizontalPadding)
+                .padding(.vertical, 16)
             }
         }
     }
