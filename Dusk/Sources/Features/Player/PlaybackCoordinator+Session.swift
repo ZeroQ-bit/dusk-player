@@ -5,6 +5,7 @@ extension PlaybackCoordinator {
     func startPlaybackSession(
         ratingKey: String,
         startPositionOverride: TimeInterval?,
+        selectedMediaID: Int?,
         presentPlayer: Bool
     ) async -> Bool {
         loadError = nil
@@ -14,9 +15,9 @@ extension PlaybackCoordinator {
         do {
             let details = try await plexService.getMediaDetails(ratingKey: ratingKey)
 
-            guard let media = StreamResolver.selectMediaVersion(
-                    from: details.media,
-                    preferredMaxResolution: preferences.maxResolution
+            guard let media = resolveMediaVersion(
+                    in: details,
+                    selectedMediaID: selectedMediaID
                   ),
                   let part = media.parts.first else {
                 loadError = "No playable media found."
@@ -163,5 +164,21 @@ extension PlaybackCoordinator {
         lastReportedTimeMs = 0
         lastReportedDurationMs = 0
         continuousPlayEpisodeRunCount = 0
+    }
+
+    private func resolveMediaVersion(
+        in details: PlexMediaDetails,
+        selectedMediaID: Int?
+    ) -> PlexMedia? {
+        if let selectedMediaID {
+            return details.media.first { media in
+                media.id == selectedMediaID && !media.parts.isEmpty
+            }
+        }
+
+        return StreamResolver.selectMediaVersion(
+            from: details.media,
+            preferredMaxResolution: preferences.maxResolution
+        )
     }
 }

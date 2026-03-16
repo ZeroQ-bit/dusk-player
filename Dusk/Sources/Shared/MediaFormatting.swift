@@ -91,6 +91,39 @@ enum MediaTextFormatter {
         }
     }
 
+    static func playbackVersionMenuLabel(_ media: PlexMedia) -> String {
+        var parts: [String] = []
+
+        if let resolution = playbackVersionResolution(media) {
+            parts.append(resolution)
+        }
+
+        if let videoCodec = media.videoCodec?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !videoCodec.isEmpty {
+            parts.append(videoCodec.uppercased())
+        }
+
+        if let audioCodec = media.audioCodec?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !audioCodec.isEmpty {
+            parts.append(audioCodec.uppercased())
+        }
+
+        if let container = media.container?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !container.isEmpty {
+            parts.append(container.uppercased())
+        }
+
+        if let bitrateLabel = playbackVersionBitrate(media) {
+            parts.append(bitrateLabel)
+        }
+
+        if media.optimizedForStreaming == 1 {
+            parts.append("Optimized")
+        }
+
+        return parts.isEmpty ? "Version \(media.id)" : parts.joined(separator: " · ")
+    }
+
     private static func pluralizedCount(
         _ count: Int?,
         singular: String,
@@ -99,6 +132,43 @@ enum MediaTextFormatter {
         guard let count, count > 0 else { return nil }
         let label = count == 1 ? singular : plural
         return "\(count) \(label)"
+    }
+
+    private static func playbackVersionResolution(_ media: PlexMedia) -> String? {
+        if let resolution = media.videoResolution?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !resolution.isEmpty {
+            let normalized = resolution.lowercased()
+            switch normalized {
+            case "4k":
+                return "4K"
+            case "sd":
+                return "SD"
+            default:
+                if normalized.hasSuffix("p") {
+                    return normalized.dropLast().allSatisfy(\.isNumber)
+                        ? "\(normalized.dropLast())p"
+                        : resolution
+                }
+                return normalized.allSatisfy(\.isNumber) ? "\(normalized)p" : resolution.uppercased()
+            }
+        }
+
+        guard let height = media.height, height > 0 else { return nil }
+        switch height {
+        case 2000...:
+            return "4K"
+        default:
+            return "\(height)p"
+        }
+    }
+
+    private static func playbackVersionBitrate(_ media: PlexMedia) -> String? {
+        guard let bitrate = media.bitrate, bitrate > 0 else { return nil }
+        if bitrate >= 1000 {
+            let megabits = Double(bitrate) / 1000.0
+            return String(format: megabits >= 10 ? "%.0f Mbps" : "%.1f Mbps", megabits)
+        }
+        return "\(bitrate) kbps"
     }
 
     private static let plexAirDateFormatter: DateFormatter = {

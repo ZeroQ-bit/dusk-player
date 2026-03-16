@@ -180,6 +180,25 @@ struct ShowDetailView: View {
             .clipShape(Capsule())
         }
         .duskSuppressTVOSButtonChrome()
+        .contextMenu {
+            if let episode = viewModel.nextEpisode {
+                PlayVersionContextMenu(versions: viewModel.nextEpisodePlayableVersions) { version in
+                    Task { await playback.playVersion(ratingKey: episode.ratingKey, mediaID: version.id) }
+                }
+            }
+
+            if let nextEpisodeRoute = viewModel.nextEpisodeRoute {
+                NavigationLink(value: nextEpisodeRoute) {
+                    Label(viewModel.nextEpisodeMenuLabel, systemImage: "play.rectangle")
+                }
+            }
+
+            if let nextSeasonRoute = viewModel.nextSeasonRoute {
+                NavigationLink(value: nextSeasonRoute) {
+                    Label(viewModel.nextSeasonMenuLabel, systemImage: "rectangle.stack")
+                }
+            }
+        }
     }
 
     private var usesFullWidthActionButtons: Bool {

@@ -51,6 +51,7 @@ final class PlaybackCoordinator {
         let didStart = await startPlaybackSession(
             ratingKey: ratingKey,
             startPositionOverride: nil,
+            selectedMediaID: nil,
             presentPlayer: true
         )
         if didStart {
@@ -67,6 +68,24 @@ final class PlaybackCoordinator {
         let didStart = await startPlaybackSession(
             ratingKey: ratingKey,
             startPositionOverride: 0,
+            selectedMediaID: nil,
+            presentPlayer: true
+        )
+        if didStart {
+            resetContinuousPlayEpisodeRunCountForCurrentItem()
+        } else {
+            continuousPlayEpisodeRunCount = 0
+        }
+    }
+
+    func playVersion(ratingKey: String, mediaID: Int) async {
+        isLoading = true
+        defer { isLoading = false }
+
+        let didStart = await startPlaybackSession(
+            ratingKey: ratingKey,
+            startPositionOverride: nil,
+            selectedMediaID: mediaID,
             presentPlayer: true
         )
         if didStart {

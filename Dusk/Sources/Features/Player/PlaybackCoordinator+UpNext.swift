@@ -139,6 +139,7 @@ extension PlaybackCoordinator {
         let didStart = await startPlaybackSession(
             ratingKey: nextRatingKey,
             startPositionOverride: nil,
+            selectedMediaID: nil,
             presentPlayer: false
         )
         if didStart {

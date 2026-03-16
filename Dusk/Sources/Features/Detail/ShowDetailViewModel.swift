@@ -9,6 +9,7 @@ final class ShowDetailViewModel {
     private(set) var details: PlexMediaDetails?
     private(set) var seasons: [PlexSeason] = []
     private(set) var nextEpisode: PlexEpisode?
+    private(set) var nextEpisodeDetails: PlexMediaDetails?
     private(set) var isLoading = false
     private(set) var error: String?
 
@@ -99,6 +100,40 @@ final class ShowDetailViewModel {
         return "Play · \(label)"
     }
 
+    var nextEpisodeRoute: AppNavigationRoute? {
+        guard let nextEpisode else { return nil }
+        return .media(type: .episode, ratingKey: nextEpisode.ratingKey)
+    }
+
+    var nextSeasonRoute: AppNavigationRoute? {
+        guard let seasonRatingKey = nextEpisode?.parentRatingKey else { return nil }
+        return .media(type: .season, ratingKey: seasonRatingKey)
+    }
+
+    var nextEpisodeMenuLabel: String {
+        guard let nextEpisode else { return "Go to Episode" }
+        let label = MediaTextFormatter.seasonEpisodeLabel(
+            season: nextEpisode.parentIndex,
+            episode: nextEpisode.index,
+            separator: " "
+        ) ?? nextEpisode.title
+        return "Go to \(label)"
+    }
+
+    var nextSeasonMenuLabel: String {
+        guard let nextEpisode else { return "Go to Season" }
+        let label = MediaTextFormatter.seasonEpisodeLabel(
+            season: nextEpisode.parentIndex,
+            episode: nil,
+            separator: " "
+        ) ?? nextEpisode.parentTitle ?? "Season"
+        return "Go to \(label)"
+    }
+
+    var nextEpisodePlayableVersions: [PlexMedia] {
+        nextEpisodeDetails?.media.filter { !$0.parts.isEmpty } ?? []
+    }
+
     private func reload() async throws {
         async let detailsRequest = plexService.getMediaDetails(ratingKey: ratingKey)
         async let seasonsRequest = plexService.getSeasons(showKey: ratingKey)
@@ -115,6 +150,7 @@ final class ShowDetailViewModel {
 
         guard let season = targetSeason else {
             nextEpisode = nil
+            nextEpisodeDetails = nil
             return
         }
 
@@ -125,8 +161,23 @@ final class ShowDetailViewModel {
             nextEpisode = episodes.first(where: \.isPartiallyWatched)
                 ?? episodes.first(where: { !$0.isWatched })
                 ?? episodes.first
+            await loadNextEpisodeDetails()
         } catch {
             nextEpisode = nil
+            nextEpisodeDetails = nil
+        }
+    }
+
+    private func loadNextEpisodeDetails() async {
+        guard let nextEpisode else {
+            nextEpisodeDetails = nil
+            return
+        }
+
+        do {
+            nextEpisodeDetails = try await plexService.getMediaDetails(ratingKey: nextEpisode.ratingKey)
+        } catch {
+            nextEpisodeDetails = nil
         }
     }
 }

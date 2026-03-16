@@ -145,6 +145,19 @@ struct SeasonDetailView: View {
             .clipShape(Capsule())
         }
         .duskSuppressTVOSButtonChrome()
+        .contextMenu {
+            if let episode = viewModel.nextEpisodeToPlay {
+                PlayVersionContextMenu(versions: viewModel.nextEpisodePlayableVersions) { version in
+                    Task { await playback.playVersion(ratingKey: episode.ratingKey, mediaID: version.id) }
+                }
+            }
+
+            if let nextEpisodeRoute = viewModel.nextEpisodeRoute {
+                NavigationLink(value: nextEpisodeRoute) {
+                    Label(viewModel.nextEpisodeMenuLabel, systemImage: "play.rectangle")
+                }
+            }
+        }
     }
 
     private var usesFullWidthActionButtons: Bool {

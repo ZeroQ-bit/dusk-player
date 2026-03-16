@@ -184,6 +184,11 @@ struct MovieDetailView: View {
                 .clipShape(Capsule())
             }
             .duskSuppressTVOSButtonChrome()
+            .contextMenu {
+                PlayVersionContextMenu(versions: details.media) { version in
+                    Task { await playback.playVersion(ratingKey: details.ratingKey, mediaID: version.id) }
+                }
+            }
 
             Button {
                 Task { await viewModel.toggleWatched() }

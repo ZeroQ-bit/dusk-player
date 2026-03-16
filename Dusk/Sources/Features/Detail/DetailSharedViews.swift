@@ -147,6 +147,31 @@ extension DetailHeroSection where Supertitle == EmptyView {
     }
 }
 
+struct PlayVersionContextMenu: View {
+    let versions: [PlexMedia]
+    let onSelectVersion: (PlexMedia) -> Void
+
+    var body: some View {
+        if !playableVersions.isEmpty {
+            Menu {
+                ForEach(playableVersions) { version in
+                    Button {
+                        onSelectVersion(version)
+                    } label: {
+                        Text(MediaTextFormatter.playbackVersionMenuLabel(version))
+                    }
+                }
+            } label: {
+                Label("Play Version", systemImage: "play.square")
+            }
+        }
+    }
+
+    private var playableVersions: [PlexMedia] {
+        versions.filter { !$0.parts.isEmpty }
+    }
+}
+
 // MARK: - Actor Credit Card
 
 struct ActorCreditCard: View {
