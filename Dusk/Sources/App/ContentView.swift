@@ -17,7 +17,7 @@ struct ContentView: View {
                 ServerPickerView(servers: servers) { server in
                     try await plexService.connect(to: server)
                 } onSignOut: {
-                    plexService.signOut()
+                    signOut()
                 }
             } else {
                 serverDiscoveryView
@@ -43,11 +43,17 @@ struct ContentView: View {
                         .foregroundStyle(Color.duskTextSecondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 40)
-                    Button("Retry") {
-                        connectError = nil
-                        discoveredServers = nil
+                    VStack(spacing: 12) {
+                        Button("Retry") {
+                            resetDiscoveryState()
+                        }
+                        .duskSuppressTVOSButtonChrome()
+
+                        Button("Sign Out", role: .destructive) {
+                            signOut()
+                        }
+                        .duskSuppressTVOSButtonChrome()
                     }
-                    .duskSuppressTVOSButtonChrome()
                 } else {
                     ProgressView()
                         .tint(Color.duskAccent)
@@ -75,5 +81,15 @@ struct ContentView: View {
         } catch {
             connectError = error.localizedDescription
         }
+    }
+
+    private func resetDiscoveryState() {
+        connectError = nil
+        discoveredServers = nil
+    }
+
+    private func signOut() {
+        resetDiscoveryState()
+        plexService.signOut()
     }
 }
