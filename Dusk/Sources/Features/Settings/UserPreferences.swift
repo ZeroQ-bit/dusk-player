@@ -350,4 +350,23 @@ enum MaxResolution: String, CaseIterable, Identifiable {
         case .sevenTwentyP: 720
         }
     }
+
+    /// Playback target used when selecting among multiple Plex media versions.
+    /// Auto prefers 4K on Apple TV and 1080p everywhere else.
+    var selectionTargetMaxHeight: Int {
+        switch self {
+        case .auto:
+            #if os(tvOS)
+            2160
+            #else
+            1080
+            #endif
+        case .fourK:
+            2160
+        case .tenEightyP:
+            1080
+        case .sevenTwentyP:
+            720
+        }
+    }
 }

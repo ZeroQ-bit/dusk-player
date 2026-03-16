@@ -14,7 +14,10 @@ extension PlaybackCoordinator {
         do {
             let details = try await plexService.getMediaDetails(ratingKey: ratingKey)
 
-            guard let media = details.media.first,
+            guard let media = StreamResolver.selectMediaVersion(
+                    from: details.media,
+                    preferredMaxResolution: preferences.maxResolution
+                  ),
                   let part = media.parts.first else {
                 loadError = "No playable media found."
                 return false

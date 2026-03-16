@@ -28,6 +28,50 @@ enum StreamResolver {
 
     // MARK: - Resolution
 
+    /// Choose the most appropriate Plex media version for playback.
+    /// Preference is treated as a target, not a hard failure condition.
+    static func selectMediaVersion(
+        from mediaVersions: [PlexMedia],
+        preferredMaxResolution: MaxResolution
+    ) -> PlexMedia? {
+        let playableCandidates = mediaVersions.enumerated().compactMap { entry -> MediaCandidate? in
+            let (index, media) = entry
+            guard !media.parts.isEmpty else { return nil }
+            return MediaCandidate(index: index, media: media)
+        }
+
+        guard !playableCandidates.isEmpty else { return mediaVersions.first }
+        guard playableCandidates.count > 1 else { return playableCandidates.first?.media }
+
+        let targetHeight = preferredMaxResolution.selectionTargetMaxHeight
+
+        let withinTarget = playableCandidates
+            .filter { candidate in
+                guard let height = candidate.height else { return false }
+                return height <= targetHeight
+            }
+            .sorted(by: sortWithinTarget)
+
+        if let bestWithinTarget = withinTarget.first {
+            return bestWithinTarget.media
+        }
+
+        let aboveTarget = playableCandidates
+            .filter { candidate in
+                guard let height = candidate.height else { return false }
+                return height > targetHeight
+            }
+            .sorted(by: sortAboveTarget)
+
+        if let closestAboveTarget = aboveTarget.first {
+            return closestAboveTarget.media
+        }
+
+        return playableCandidates
+            .sorted(by: sortUnknownHeights)
+            .first?.media
+    }
+
     /// Inspect a `PlexMedia` and decide which engine should play it.
     ///
     /// - Parameters:
@@ -75,5 +119,82 @@ enum StreamResolver {
         }
 
         return .avPlayer
+    }
+}
+
+private extension StreamResolver {
+    struct MediaCandidate {
+        let index: Int
+        let media: PlexMedia
+
+        var height: Int? {
+            Self.resolveHeight(for: media)
+        }
+
+        var bitrate: Int {
+            media.bitrate ?? 0
+        }
+
+        var isOptimizedForStreaming: Bool {
+            media.optimizedForStreaming == 1
+        }
+
+        private static func resolveHeight(for media: PlexMedia) -> Int? {
+            if let height = media.height, height > 0 {
+                return height
+            }
+
+            guard let resolution = media.videoResolution?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+                  !resolution.isEmpty else {
+                return nil
+            }
+
+            switch resolution {
+            case "4k":
+                return 2160
+            case "sd":
+                return 480
+            default:
+                let digits = resolution.compactMap(\.wholeNumberValue)
+                guard !digits.isEmpty else { return nil }
+                return digits.reduce(0) { ($0 * 10) + $1 }
+            }
+        }
+    }
+
+    static func sortWithinTarget(_ lhs: MediaCandidate, _ rhs: MediaCandidate) -> Bool {
+        if lhs.height != rhs.height {
+            return (lhs.height ?? 0) > (rhs.height ?? 0)
+        }
+        if lhs.bitrate != rhs.bitrate {
+            return lhs.bitrate > rhs.bitrate
+        }
+        if lhs.isOptimizedForStreaming != rhs.isOptimizedForStreaming {
+            return lhs.isOptimizedForStreaming && !rhs.isOptimizedForStreaming
+        }
+        return lhs.index < rhs.index
+    }
+
+    static func sortAboveTarget(_ lhs: MediaCandidate, _ rhs: MediaCandidate) -> Bool {
+        if lhs.height != rhs.height {
+            return (lhs.height ?? .max) < (rhs.height ?? .max)
+        }
+        if lhs.bitrate != rhs.bitrate {
+            return lhs.bitrate > rhs.bitrate
+        }
+        if lhs.isOptimizedForStreaming != rhs.isOptimizedForStreaming {
+            return lhs.isOptimizedForStreaming && !rhs.isOptimizedForStreaming
+        }
+        return lhs.index < rhs.index
+    }
+
+    static func sortUnknownHeights(_ lhs: MediaCandidate, _ rhs: MediaCandidate) -> Bool {
+        if lhs.bitrate != rhs.bitrate {
+            return lhs.bitrate > rhs.bitrate
+        }
+        if lhs.isOptimizedForStreaming != rhs.isOptimizedForStreaming {
+            return lhs.isOptimizedForStreaming && !rhs.isOptimizedForStreaming
+        }
+        return lhs.index < rhs.index
     }
 }
