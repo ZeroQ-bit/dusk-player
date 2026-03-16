@@ -3,6 +3,8 @@ import SwiftUI
 
 extension PlayerViewModel {
     private static let controlsVisibilityAnimation: Animation = .easeInOut(duration: 0.125)
+    private static let playPauseAnimation: Animation = .snappy(duration: 0.1)
+    private static let pendingPlaybackStateGracePeriod: TimeInterval = 0.35
     private static let seekFeedbackDisplayDuration: Duration = .milliseconds(325)
     private static let markerSkipPadding: TimeInterval = 0.5
     private static let autoSkipCountdownDuration: TimeInterval = 5.0
@@ -16,7 +18,21 @@ extension PlayerViewModel {
     }
 
     func sync() {
-        state = engine.state
+        let engineState = engine.state
+        let now = Date()
+
+        if let pendingPlaybackState,
+           let pendingPlaybackStateExpiration,
+           now < pendingPlaybackStateExpiration,
+           engineState != pendingPlaybackState {
+            // Keep the play/pause icon responsive immediately after a tap
+            // instead of snapping back while the engine catches up.
+        } else {
+            pendingPlaybackState = nil
+            pendingPlaybackStateExpiration = nil
+            state = engineState
+        }
+
         if !isScrubbing {
             currentTime = engine.currentTime
         }
@@ -32,10 +48,21 @@ extension PlayerViewModel {
     }
 
     func togglePlayPause() {
-        if state == .playing {
+        let targetState: PlaybackState = state == .playing ? .paused : .playing
+        pendingPlaybackState = targetState
+        pendingPlaybackStateExpiration = Date().addingTimeInterval(Self.pendingPlaybackStateGracePeriod)
+
+        withAnimation(Self.playPauseAnimation) {
+            state = targetState
+        }
+
+        switch targetState {
+        case .paused:
             engine.pause()
-        } else {
+        case .playing:
             engine.play()
+        default:
+            break
         }
         touchControls()
     }

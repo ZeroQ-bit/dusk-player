@@ -58,6 +58,8 @@ final class PlayerViewModel {
     var hasConfiguredAutomaticTrackSelection = false
     var hasAppliedAutomaticAudioSelection = false
     var hasAppliedAutomaticSubtitleSelection = false
+    var pendingPlaybackState: PlaybackState?
+    var pendingPlaybackStateExpiration: Date?
     @ObservationIgnored nonisolated(unsafe) var syncTimer: Timer?
     @ObservationIgnored nonisolated(unsafe) var hideTimer: Timer?
     @ObservationIgnored nonisolated(unsafe) var seekFeedbackTask: Task<Void, Never>?
