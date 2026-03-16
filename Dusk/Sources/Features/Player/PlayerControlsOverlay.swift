@@ -118,8 +118,7 @@ struct PlayerControlsOverlay: View {
             Button { viewModel.togglePlayPause() } label: {
                 Image(systemName: isPlaying ? "pause.fill" : "play.fill")
                     .font(.system(size: 44))
-                    .contentTransition(.symbolEffect(.replace))
-                    .animation(.snappy(duration: 0.11), value: isPlaying)
+                    .contentTransition(.symbolEffect(.replace, options: .speed(2)))
                     .foregroundStyle(.white)
                     .frame(width: 72, height: 72)
                     .background(.ultraThinMaterial, in: Circle())
