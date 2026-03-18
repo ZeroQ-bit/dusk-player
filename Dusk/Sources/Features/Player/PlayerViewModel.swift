@@ -114,6 +114,6 @@ final class PlayerViewModel {
     func startPlaybackIfNeeded(source: PlaybackSource) {
         guard !hasLoadedSource else { return }
         hasLoadedSource = true
-        engine.load(url: source.url, startPosition: source.startPosition)
+        engine.load(source: source)
     }
 }

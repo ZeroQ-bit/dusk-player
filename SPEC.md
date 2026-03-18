@@ -82,7 +82,7 @@ All network calls go through `PlexService`. ViewModels hold UI state and call `P
 
 | Dependency | Purpose | License |
 |------------|---------|---------|
-| VLCKit 3.x | Fallback playback engine for MKV, DTS, PGS subs, etc. | LGPL 2.1 |
+| VLCKit 4.x | Fallback playback engine for MKV, DTS, PGS subs, etc. | LGPL 2.1 |
 | AVFoundation (system) | Primary playback engine for AVPlayer-compatible content | N/A |
 | KeychainAccess (or raw Security framework) | Auth token storage | MIT (if using library) |
 
@@ -532,4 +532,4 @@ SwiftData chosen because: native SwiftUI integration, `@Query` for reactive view
 1. **App name: Dusk.** Repository: `dusk-player`. Plex client identifier: `com.dusk-player.app`. Product header: `Dusk`.
 2. **Plex Pass not required.** The app relies on direct play, library browsing, and timeline reporting, none of which require Plex Pass. If a Plex Pass-only feature becomes relevant later (e.g., hardware-accelerated transcoding on the server when we add transcoding fallback), handle it gracefully: detect the 401/403 response, show a clear message explaining the feature requires Plex Pass, and continue operating without it.
 3. **Image loading: AsyncImage + URLCache.** Configure a shared URLSession with a generous URLCache (200MB disk). Use AsyncImage throughout. No third-party image loading dependency (Kingfisher, Nuke, etc.). If performance becomes an issue with large grids, revisit with a lightweight prefetch layer before adding a dependency.
-4. **VLCKit integration: vendor the xcframework manually.** VLCKit still has no official SPM path that fits the app's needs, and CocoaPods adds project complexity. The current approach is to keep a pinned `Frameworks/VLCKit.xcframework` in the repository, link it dynamically for LGPL compliance, and refresh it manually with `./ci_scripts/install_vlckit.sh` when upstream needs to change. This keeps the project dependency model simple while preserving control over the exact VLCKit build and PiP-capable API surface.
+4. **VLCKit integration: vendor the xcframeworks manually.** VLCKit still has no official SPM path that fits the app's needs, and CocoaPods adds project complexity. The current approach is to keep pinned `Frameworks/VLCKit.xcframework` and `Frameworks/VLCKit-tvOS.xcframework` binaries in the repository, link them dynamically for LGPL compliance, and refresh them manually with `./ci_scripts/install_vlckit.sh` when upstream needs to change. This keeps the project dependency model simple while preserving control over the exact VLCKit build and PiP-capable API surface on iOS and the matching tvOS build.

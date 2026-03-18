@@ -70,8 +70,6 @@ enum PlaybackEngineFactory {
                 return warmedVLCKitEngine
             }
             return VLCKitEngine()
-            #elseif canImport(TVVLCKit)
-            return VLCKitEngine()
             #else
             fatalError("VLCKit is not available on this platform")
             #endif

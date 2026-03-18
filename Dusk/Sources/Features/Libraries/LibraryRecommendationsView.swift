@@ -100,30 +100,16 @@ struct LibraryRecommendationsView: View {
 
         return MediaCarousel(title: viewModel.continueWatchingTitle) {
             ForEach(viewModel.continueWatching) { item in
-                #if os(tvOS)
-                VStack(alignment: .leading, spacing: 6) {
-                    Button {
-                        play(item)
-                    } label: {
-                        PosterArtwork(
-                            imageURL: viewModel.landscapeImageURL(for: item, width: imageWidth, height: imageHeight),
-                            progress: viewModel.progress(for: item),
-                            width: continueWatchingCardWidth,
-                            imageAspectRatio: continueWatchingAspectRatio,
-                            showsPlayOverlay: true
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .duskSuppressTVOSButtonChrome()
-
-                    PosterCardText(
-                        title: viewModel.displayTitle(for: item),
-                        subtitle: viewModel.displaySubtitle(for: item),
-                        width: continueWatchingCardWidth
-                    )
-                }
-                .frame(width: continueWatchingCardWidth, alignment: .topLeading)
-                .contextMenu {
+                PosterActionCard(
+                    action: { play(item) },
+                    imageURL: viewModel.landscapeImageURL(for: item, width: imageWidth, height: imageHeight),
+                    title: viewModel.displayTitle(for: item),
+                    subtitle: viewModel.displaySubtitle(for: item),
+                    progress: viewModel.progress(for: item),
+                    width: continueWatchingCardWidth,
+                    imageAspectRatio: continueWatchingAspectRatio,
+                    showsPlayOverlay: true
+                ) {
                     PlexItemContextMenuContent(
                         item: item,
                         onMarkWatched: {
@@ -136,36 +122,6 @@ struct LibraryRecommendationsView: View {
                         detailsLabel: detailsLabel(for: item)
                     )
                 }
-                #else
-                Button {
-                    play(item)
-                } label: {
-                    PosterCard(
-                        imageURL: viewModel.landscapeImageURL(for: item, width: imageWidth, height: imageHeight),
-                        title: viewModel.displayTitle(for: item),
-                        subtitle: viewModel.displaySubtitle(for: item),
-                        progress: viewModel.progress(for: item),
-                        width: continueWatchingCardWidth,
-                        imageAspectRatio: continueWatchingAspectRatio,
-                        showsPlayOverlay: true
-                    )
-                }
-                .buttonStyle(.plain)
-                .duskSuppressTVOSButtonChrome()
-                .contextMenu {
-                    PlexItemContextMenuContent(
-                        item: item,
-                        onMarkWatched: {
-                            Task { await viewModel.setWatched(true, for: item) }
-                        },
-                        onMarkUnwatched: {
-                            Task { await viewModel.setWatched(false, for: item) }
-                        },
-                        detailsRoute: AppNavigationRoute.destination(for: item),
-                        detailsLabel: detailsLabel(for: item)
-                    )
-                }
-                #endif
             }
         }
     }
@@ -191,26 +147,12 @@ struct LibraryRecommendationsView: View {
             }
         ) {
             ForEach(items) { item in
-                #if os(tvOS)
-                VStack(alignment: .leading, spacing: 6) {
-                    NavigationLink(value: AppNavigationRoute.destination(for: item)) {
-                        PosterArtwork(
-                            imageURL: viewModel.posterURL(for: item, width: imageWidth, height: imageHeight),
-                            width: 130,
-                            imageAspectRatio: 2.0 / 3.0
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .duskSuppressTVOSButtonChrome()
-
-                    PosterCardText(
-                        title: item.title,
-                        subtitle: viewModel.subtitle(for: item),
-                        width: 130
-                    )
-                }
-                .frame(width: 130, alignment: .topLeading)
-                .contextMenu {
+                PosterNavigationCard(
+                    route: AppNavigationRoute.destination(for: item),
+                    imageURL: viewModel.posterURL(for: item, width: imageWidth, height: imageHeight),
+                    title: item.title,
+                    subtitle: viewModel.subtitle(for: item)
+                ) {
                     PlexItemContextMenuContent(
                         item: item,
                         onMarkWatched: {
@@ -221,28 +163,6 @@ struct LibraryRecommendationsView: View {
                         }
                     )
                 }
-                #else
-                NavigationLink(value: AppNavigationRoute.destination(for: item)) {
-                    PosterCard(
-                        imageURL: viewModel.posterURL(for: item, width: imageWidth, height: imageHeight),
-                        title: item.title,
-                        subtitle: viewModel.subtitle(for: item)
-                    )
-                }
-                .buttonStyle(.plain)
-                .duskSuppressTVOSButtonChrome()
-                .contextMenu {
-                    PlexItemContextMenuContent(
-                        item: item,
-                        onMarkWatched: {
-                            Task { await viewModel.setWatched(true, for: item) }
-                        },
-                        onMarkUnwatched: {
-                            Task { await viewModel.setWatched(false, for: item) }
-                        }
-                    )
-                }
-                #endif
             }
         }
     }

@@ -137,8 +137,7 @@ private struct PlayerSessionView: View {
                 }
 
                 if preferences.playerDebugOverlayEnabled,
-                   let debugInfo,
-                   viewModel.playbackError == nil {
+                   let debugInfo {
                     PlayerDebugOverlayView(
                         debugInfo: debugInfo,
                         state: viewModel.state,
@@ -169,6 +168,18 @@ private struct PlayerSessionView: View {
         .animation(.easeInOut(duration: 0.25), value: playback.upNextPresentation?.episode.ratingKey)
         .duskStatusBarHidden()
         .persistentSystemOverlays(.hidden)
+        #if os(tvOS)
+        .onPlayPauseCommand {
+            viewModel.togglePlayPause()
+        }
+        .onExitCommand {
+            if viewModel.showControls {
+                dismissPlayer()
+            } else {
+                viewModel.toggleControls()
+            }
+        }
+        #endif
         .onAppear {
             viewModel.configureAutomaticTrackSelection(
                 preferences: preferences,

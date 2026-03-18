@@ -31,8 +31,16 @@ Carthage/Build/
 !Frameworks/
 !Frameworks/VLCKit.xcframework/
 !Frameworks/VLCKit.xcframework/**
+!Frameworks/VLCKit-tvOS.xcframework/
+!Frameworks/VLCKit-tvOS.xcframework/**
 Frameworks/VLCKit.xcframework/**/dSYMs/
 Frameworks/VLCKit.xcframework/**/dSYMs/**
+Frameworks/VLCKit-tvOS.xcframework/**/dSYMs/
+Frameworks/VLCKit-tvOS.xcframework/**/dSYMs/**
+Frameworks/VLCKit.xcframework/**/_CodeSignature/
+Frameworks/VLCKit.xcframework/**/_CodeSignature/**
+Frameworks/VLCKit-tvOS.xcframework/**/_CodeSignature/
+Frameworks/VLCKit-tvOS.xcframework/**/_CodeSignature/**
 !Frameworks/VLCKit-LICENSE.txt
 
 # OS files

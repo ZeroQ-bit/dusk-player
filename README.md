@@ -38,7 +38,7 @@ xcodegen generate
 open Dusk.xcodeproj
 ```
 
-The repository now vendors `Frameworks/VLCKit.xcframework` directly. To refresh that binary manually, run:
+The repository now vendors `Frameworks/VLCKit.xcframework` for iOS/iPadOS and `Frameworks/VLCKit-tvOS.xcframework` for tvOS. To refresh those binaries manually, run:
 
 ```bash
 ./ci_scripts/install_vlckit.sh

@@ -212,26 +212,14 @@ struct LibraryItemsView: View {
         imageWidth: Int,
         imageHeight: Int
     ) -> some View {
-        #if os(tvOS)
-        VStack(alignment: .leading, spacing: 6) {
-            NavigationLink(value: AppNavigationRoute.destination(for: item)) {
-                PosterArtwork(
-                    imageURL: viewModel.posterURL(for: item, width: imageWidth, height: imageHeight),
-                    progress: viewModel.progress(for: item),
-                    width: posterWidth
-                )
-            }
-            .buttonStyle(.plain)
-            .duskSuppressTVOSButtonChrome()
-
-            PosterCardText(
-                title: item.title,
-                subtitle: viewModel.subtitle(for: item),
-                width: posterWidth
-            )
-        }
-        .frame(width: posterWidth, alignment: .topLeading)
-        .contextMenu {
+        PosterNavigationCard(
+            route: AppNavigationRoute.destination(for: item),
+            imageURL: viewModel.posterURL(for: item, width: imageWidth, height: imageHeight),
+            title: item.title,
+            subtitle: viewModel.subtitle(for: item),
+            progress: viewModel.progress(for: item),
+            width: posterWidth
+        ) {
             PlexItemContextMenuContent(
                 item: item,
                 onMarkWatched: {
@@ -245,34 +233,6 @@ struct LibraryItemsView: View {
         .onAppear {
             Task { await viewModel.loadMoreIfNeeded(currentItem: item) }
         }
-        #else
-        NavigationLink(value: AppNavigationRoute.destination(for: item)) {
-            PosterCard(
-                imageURL: viewModel.posterURL(for: item, width: imageWidth, height: imageHeight),
-                title: item.title,
-                subtitle: viewModel.subtitle(for: item),
-                progress: viewModel.progress(for: item),
-                width: posterWidth
-            )
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .buttonStyle(.plain)
-        .duskSuppressTVOSButtonChrome()
-        .contextMenu {
-            PlexItemContextMenuContent(
-                item: item,
-                onMarkWatched: {
-                    Task { await viewModel.setWatched(true, for: item) }
-                },
-                onMarkUnwatched: {
-                    Task { await viewModel.setWatched(false, for: item) }
-                }
-            )
-        }
-        .onAppear {
-            Task { await viewModel.loadMoreIfNeeded(currentItem: item) }
-        }
-        #endif
     }
 
     private var emptyView: some View {

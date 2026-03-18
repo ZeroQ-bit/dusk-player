@@ -52,7 +52,7 @@ struct DuskApp: App {
                 .preferredColorScheme(userPreferences.appearanceMode.preferredColorScheme)
                 .tint(Color.duskAccent)
                 .task {
-                    await PlaybackEngineFactory.prewarmIfNeeded()
+                    PlaybackEngineFactory.prewarmIfNeeded()
                 }
         }
     }

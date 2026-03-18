@@ -1,13 +1,46 @@
 #if canImport(VLCKit)
+import OSLog
 import SwiftUI
 import UIKit
 import VLCKit
+#endif
+
+#if canImport(VLCKit)
+private let vlcKitEngineLogger = Logger(
+    subsystem: Bundle.main.bundleIdentifier ?? "Dusk",
+    category: "VLCKitEngine"
+)
+
+/// Platform renderer contract for the shared VLCKit playback core.
+protocol VLCKitRenderingHost: AnyObject, Sendable {
+    var playerView: UIView { get }
+
+    func attach(to player: VLCMediaPlayer, engine: VLCKitEngine)
+    func detach(from player: VLCMediaPlayer)
+    func updatePlaybackState(
+        currentTimeMs: Int64,
+        durationMs: Int64,
+        isPlaying: Bool,
+        isSeekable: Bool
+    )
+    func invalidatePlaybackState()
+}
+
+@MainActor
+private func makeVLCKitRenderingHost() -> any VLCKitRenderingHost {
+    #if os(iOS)
+    IOSVLCKitRenderingHost()
+    #elseif os(tvOS)
+    TVOSVLCKitRenderingHost()
+    #else
+    fatalError("VLCKit is not supported on this platform")
+    #endif
+}
 
 /// PlaybackEngine implementation backed by upstream VLCKit 4.x.
 ///
-/// Handles MKV, DTS, PGS subtitles, and any other format that AVPlayer
-/// cannot natively decode. On iOS, Dusk uses VLCKit's PiP drawable APIs and
-/// automatically requests PiP when the app backgrounds during active playback.
+/// Shared playback logic lives here. Platform-specific rendering behavior
+/// lives in `VLCKitRendererIOS.swift` and `VLCKitRendererTVOS.swift`.
 @MainActor
 @Observable
 final class VLCKitEngine: NSObject, PlaybackEngine {
@@ -28,7 +61,7 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
     var onPlaybackEnded: (@MainActor () -> Void)?
 
     nonisolated(unsafe) private let mediaPlayer: VLCMediaPlayer
-    private let renderHost: VLCPictureInPictureRenderHost
+    private let renderingHost: any VLCKitRenderingHost
 
     private var pendingStartPosition: TimeInterval?
     private var hasAppliedStartPosition = false
@@ -36,53 +69,31 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
     private var suppressPlaybackEndedEvent = false
     private var pendingSeekTarget: TimeInterval?
     private var pendingSeekStartedAt: Date?
+    private var currentAttemptContext: PlaybackAttemptContext?
     @ObservationIgnored nonisolated(unsafe) private var seekVerificationTask: Task<Void, Never>?
 
     override init() {
         let player = VLCMediaPlayer()
-        let renderHost = VLCPictureInPictureRenderHost()
+        let renderingHost = makeVLCKitRenderingHost()
         self.mediaPlayer = player
-        self.renderHost = renderHost
+        self.renderingHost = renderingHost
         super.init()
 
-        renderHost.playHandler = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.play()
-            }
-        }
-        renderHost.pauseHandler = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.pause()
-            }
-        }
-        renderHost.seekHandler = { [weak self] offsetMs, completion in
-            Task { @MainActor [weak self] in
-                guard let self else {
-                    completion()
-                    return
-                }
-                let targetSeconds = max(0, self.currentTime + (TimeInterval(offsetMs) / 1000.0))
-                self.seek(to: targetSeconds)
-                completion()
-            }
-        }
         player.delegate = self
-        player.drawable = renderHost
         player.timeChangeUpdateInterval = 0.25
         player.minimalTimePeriod = 250_000
+        renderingHost.attach(to: player, engine: self)
     }
 
     deinit {
         seekVerificationTask?.cancel()
         mediaPlayer.stop()
         mediaPlayer.delegate = nil
-        mediaPlayer.drawable = nil
-        renderHost.playHandler = nil
-        renderHost.pauseHandler = nil
-        renderHost.seekHandler = nil
+        renderingHost.detach(from: mediaPlayer)
     }
 
-    func load(url: URL, startPosition: TimeInterval?) {
+    func load(source: PlaybackSource) {
+        currentAttemptContext = source.context
         state = .loading
         isBuffering = true
         error = nil
@@ -92,17 +103,24 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
         hasReportedPlaybackEnded = false
         suppressPlaybackEndedEvent = false
         clearPendingSeek()
-        pendingStartPosition = startPosition
+        pendingStartPosition = source.startPosition
         availableSubtitleTracks = []
         availableAudioTracks = []
         selectedSubtitleTrackID = nil
         selectedAudioTrackID = nil
-        syncPictureInPictureState()
+        syncRendererPlaybackState()
 
-        guard let media = VLCMedia(url: url) else {
+        vlcKitEngineLogger.notice(
+            "Playback attempt \(source.context.attemptLabel, privacy: .public) starting in VLCKit for ratingKey \(source.context.ratingKey, privacy: .public), media \(source.context.mediaID, privacy: .public), part \(source.context.partID, privacy: .public), URL \(source.context.sanitizedDirectPlayURL, privacy: .public)"
+        )
+
+        guard let media = VLCMedia(url: source.url) else {
             isBuffering = false
             state = .error
-            error = .unknown("VLCKit could not create media for the selected URL")
+            vlcKitEngineLogger.error(
+                "Playback attempt \(source.context.attemptLabel, privacy: .public) failed before opening: VLCKit could not create media for URL \(source.context.sanitizedDirectPlayURL, privacy: .public)"
+            )
+            error = .unknown("VLCKit could not open the direct-play stream.")
             return
         }
         applySubtitleStyling(to: media)
@@ -114,14 +132,14 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
     func play() {
         suppressPlaybackEndedEvent = false
         mediaPlayer.play()
-        syncPictureInPictureState()
+        syncRendererPlaybackState()
     }
 
     func pause() {
         seekVerificationTask?.cancel()
         seekVerificationTask = nil
         mediaPlayer.pause()
-        syncPictureInPictureState()
+        syncRendererPlaybackState()
     }
 
     func stop() {
@@ -130,7 +148,8 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
         mediaPlayer.stop()
         state = .stopped
         hasReportedPlaybackEnded = false
-        syncPictureInPictureState()
+        currentAttemptContext = nil
+        syncRendererPlaybackState()
     }
 
     func seek(to position: TimeInterval) {
@@ -150,7 +169,7 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
         // which can leave the player stuck in a paused state.
         applySeek(to: clampedPosition)
         scheduleSeekVerification(target: clampedPosition)
-        syncPictureInPictureState()
+        syncRendererPlaybackState()
     }
 
     func selectSubtitleTrack(_ track: SubtitleTrack?) {
@@ -174,10 +193,11 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
     }
 
     func makePlayerView() -> AnyView {
-        AnyView(VLCPlayerRepresentable(playerView: renderHost.containerView))
+        AnyView(VLCPlayerRepresentable(playerView: renderingHost.playerView))
     }
 
     fileprivate func handleStateChange(_ vlcState: VLCMediaPlayerState) {
+        logStateChange(vlcState)
         switch vlcState {
         case .opening, .buffering:
             isBuffering = true
@@ -213,6 +233,11 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
                 currentTime = max(currentTime, duration)
                 if !hasReportedPlaybackEnded {
                     hasReportedPlaybackEnded = true
+                    if let currentAttemptContext {
+                        vlcKitEngineLogger.notice(
+                            "Playback attempt \(currentAttemptContext.attemptLabel, privacy: .public) VLCKit reached end of playback"
+                        )
+                    }
                     onPlaybackEnded?()
                 }
             }
@@ -222,15 +247,21 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
         case .error:
             isBuffering = false
             state = .error
-            error = .unknown("VLCKit playback error")
+            let parsedStatus = String(describing: mediaPlayer.media?.parsedStatus)
+            let attemptLabel = currentAttemptContext?.attemptLabel ?? "unknown"
+            let urlLabel = currentAttemptContext?.sanitizedDirectPlayURL ?? "<unknown>"
+            vlcKitEngineLogger.error(
+                "Playback attempt \(attemptLabel, privacy: .public) VLCKit entered error state. parsedStatus=\(parsedStatus, privacy: .public) currentTime=\(self.currentTime, privacy: .public) duration=\(self.duration, privacy: .public) URL=\(urlLabel, privacy: .public)"
+            )
+            error = .unknown(vlcPlaybackErrorMessage())
             clearPendingSeek()
 
         @unknown default:
             break
         }
 
-        syncPictureInPictureState()
-        renderHost.invalidatePlaybackState()
+        syncRendererPlaybackState()
+        renderingHost.invalidatePlaybackState()
     }
 
     fileprivate func updateTime(timeMs: Int32, lengthMs: Int32) {
@@ -242,7 +273,7 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
         if shouldAcceptUpdatedTime(updatedTime) {
             currentTime = updatedTime
         }
-        syncPictureInPictureState()
+        syncRendererPlaybackState()
     }
 
     private var shouldTreatCurrentStopAsPlaybackEnded: Bool {
@@ -252,8 +283,8 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
         return reachedDuration || reachedEndPosition
     }
 
-    private func syncPictureInPictureState() {
-        renderHost.updatePlaybackState(
+    private func syncRendererPlaybackState() {
+        renderingHost.updatePlaybackState(
             currentTimeMs: Int64(currentTime * 1000),
             durationMs: Int64(duration * 1000),
             isPlaying: state == .playing,
@@ -350,6 +381,21 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
         seekVerificationTask = nil
     }
 
+    private func vlcPlaybackErrorMessage() -> String {
+        guard let currentAttemptContext else {
+            return "VLCKit failed while opening the direct-play stream."
+        }
+        return "VLCKit failed while opening the direct-play stream. \(currentAttemptContext.sanitizedDirectPlayURL)"
+    }
+
+    private func logStateChange(_ vlcState: VLCMediaPlayerState) {
+        let attemptLabel = currentAttemptContext?.attemptLabel ?? "unknown"
+        let parsedStatus = String(describing: mediaPlayer.media?.parsedStatus)
+        vlcKitEngineLogger.debug(
+            "Playback attempt \(attemptLabel, privacy: .public) VLCKit state=\(String(describing: vlcState), privacy: .public) parsedStatus=\(parsedStatus, privacy: .public) currentTime=\(self.currentTime, privacy: .public) duration=\(self.duration, privacy: .public) buffering=\(self.isBuffering, privacy: .public)"
+        )
+    }
+
     private func refreshTracks() {
         availableAudioTracks = mediaPlayer.audioTracks.map { track in
             AudioTrack(
@@ -413,7 +459,7 @@ extension VLCKitEngine: VLCMediaPlayerDelegate {
         let timeMs = mediaPlayer.time.intValue
         Task { @MainActor [weak self] in
             self?.updateTime(timeMs: timeMs, lengthMs: Int32(length))
-            self?.renderHost.invalidatePlaybackState()
+            self?.renderingHost.invalidatePlaybackState()
         }
     }
 
@@ -463,166 +509,6 @@ private struct VLCPlayerRepresentable: UIViewRepresentable {
 
     func updateUIView(_ uiView: UIView, context: Context) {}
 }
-
-private final class VLCPictureInPictureRenderHost: NSObject, @unchecked Sendable, VLCDrawable, VLCPictureInPictureDrawable, VLCPictureInPictureMediaControlling {
-    let containerView: VLCPictureInPictureContainerView
-
-    var playHandler: (() -> Void)?
-    var pauseHandler: (() -> Void)?
-    var seekHandler: ((Int64, @escaping () -> Void) -> Void)?
-
-    private var pictureInPictureController: (any VLCPictureInPictureWindowControlling)?
-    private var hostedVideoView: UIView?
-    private var currentTimeMs: Int64 = 0
-    private var durationMs: Int64 = 0
-    private var mediaPlaying = false
-    private var mediaSeekable = false
-    private var pendingAutomaticPiPStart = false
-    private var isPictureInPictureActive = false
-    private var notificationObservers: [NSObjectProtocol] = []
-
-    @MainActor
-    override init() {
-        self.containerView = VLCPictureInPictureContainerView()
-        super.init()
-        containerView.backgroundColor = .black
-        observeApplicationLifecycle()
-    }
-
-    deinit {
-        notificationObservers.forEach(NotificationCenter.default.removeObserver)
-    }
-
-    func updatePlaybackState(
-        currentTimeMs: Int64,
-        durationMs: Int64,
-        isPlaying: Bool,
-        isSeekable: Bool
-    ) {
-        self.currentTimeMs = currentTimeMs
-        self.durationMs = durationMs
-        self.mediaPlaying = isPlaying
-        self.mediaSeekable = isSeekable
-    }
-
-    func invalidatePlaybackState() {
-        pictureInPictureController?.invalidatePlaybackState()
-    }
-
-    func addSubview(_ view: UIView) {
-        MainActor.assumeIsolated {
-            if hostedVideoView !== view {
-                hostedVideoView?.removeFromSuperview()
-                hostedVideoView = view
-                view.frame = containerView.bounds
-                view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-                containerView.addSubview(view)
-            }
-        }
-    }
-
-    func bounds() -> CGRect {
-        MainActor.assumeIsolated {
-            containerView.bounds
-        }
-    }
-
-    func mediaController() -> (any VLCPictureInPictureMediaControlling)? {
-        self
-    }
-
-    func pictureInPictureReady() -> (((any VLCPictureInPictureWindowControlling)?) -> Void)? {
-        { [weak self] controller in
-            guard let self, let controller else { return }
-
-            self.pictureInPictureController = controller
-            controller.stateChangeEventHandler = { [weak self] isStarted in
-                self?.isPictureInPictureActive = isStarted
-                if isStarted {
-                    self?.pendingAutomaticPiPStart = false
-                }
-            }
-            controller.invalidatePlaybackState()
-        }
-    }
-
-    func play() {
-        playHandler?()
-    }
-
-    func pause() {
-        pauseHandler?()
-    }
-
-    func seek(by offset: Int64, completion: @escaping () -> Void) {
-        seekHandler?(offset, completion)
-    }
-
-    func mediaLength() -> Int64 {
-        durationMs
-    }
-
-    func mediaTime() -> Int64 {
-        currentTimeMs
-    }
-
-    func isMediaSeekable() -> Bool {
-        mediaSeekable
-    }
-
-    func isMediaPlaying() -> Bool {
-        mediaPlaying
-    }
-
-    private func observeApplicationLifecycle() {
-        let notificationCenter = NotificationCenter.default
-        notificationObservers = [
-            notificationCenter.addObserver(
-                forName: UIApplication.willResignActiveNotification,
-                object: nil,
-                queue: .main
-            ) { [weak self] _ in
-                self?.pendingAutomaticPiPStart = self?.shouldStartPictureInPictureAutomatically ?? false
-            },
-            notificationCenter.addObserver(
-                forName: UIApplication.didBecomeActiveNotification,
-                object: nil,
-                queue: .main
-            ) { [weak self] _ in
-                self?.pendingAutomaticPiPStart = false
-            },
-            notificationCenter.addObserver(
-                forName: UIApplication.didEnterBackgroundNotification,
-                object: nil,
-                queue: .main
-            ) { [weak self] _ in
-                self?.startPictureInPictureIfNeeded()
-            },
-        ]
-    }
-
-    private var shouldStartPictureInPictureAutomatically: Bool {
-        MainActor.assumeIsolated {
-            pictureInPictureController != nil &&
-            !isPictureInPictureActive &&
-            mediaPlaying &&
-            containerView.window != nil &&
-            !containerView.bounds.isEmpty
-        }
-    }
-
-    private func startPictureInPictureIfNeeded() {
-        guard pendingAutomaticPiPStart, shouldStartPictureInPictureAutomatically else {
-            pendingAutomaticPiPStart = false
-            return
-        }
-
-        pendingAutomaticPiPStart = false
-        pictureInPictureController?.startPictureInPicture()
-    }
-}
-
-private final class VLCPictureInPictureContainerView: UIView {}
 
 private extension Int {
     var nonZeroValue: Int? {

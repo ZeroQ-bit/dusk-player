@@ -1,8 +1,24 @@
 import Foundation
 
+struct PlaybackAttemptContext: Sendable {
+    let attemptID: UUID
+    let title: String
+    let ratingKey: String
+    let engine: PlaybackEngineType
+    let resolverReason: String
+    let mediaID: Int
+    let partID: Int
+    let sanitizedDirectPlayURL: String
+
+    var attemptLabel: String {
+        attemptID.uuidString
+    }
+}
+
 struct PlaybackSource: Sendable {
     let url: URL
     let startPosition: TimeInterval?
+    let context: PlaybackAttemptContext
 }
 
 struct PlaybackDebugInfo: Sendable {
@@ -11,6 +27,9 @@ struct PlaybackDebugInfo: Sendable {
     let decision: PlaybackDecision
     let media: PlexMedia
     let part: PlexMediaPart
+    let attemptID: UUID
+    let resolverReason: String
+    let sanitizedDirectPlayURL: String
 
     var engineLabel: String {
         switch engine {
@@ -85,6 +104,18 @@ struct PlaybackDebugInfo: Sendable {
     var subtitleLabel: String {
         guard let subtitle = selectedSubtitleStream else { return "None" }
         return subtitle.extendedDisplayTitle ?? subtitle.displayTitle ?? subtitle.codec?.uppercased() ?? "Selected"
+    }
+
+    var attemptLabel: String {
+        attemptID.uuidString
+    }
+
+    var resolverLabel: String {
+        resolverReason
+    }
+
+    var urlLabel: String {
+        sanitizedDirectPlayURL
     }
 
     private var selectedVideoStream: PlexStream? {

@@ -245,44 +245,16 @@ struct ShowDetailView: View {
 
                 LazyVGrid(columns: layout.columns, alignment: .leading, spacing: 18) {
                     ForEach(viewModel.seasons) { season in
-                        #if os(tvOS)
-                        VStack(alignment: .leading, spacing: 6) {
-                            NavigationLink(value: AppNavigationRoute.media(type: .season, ratingKey: season.ratingKey)) {
-                                PosterArtwork(
-                                    imageURL: viewModel.seasonPosterURL(season, width: imageWidth, height: imageHeight),
-                                    progress: viewModel.seasonProgress(season),
-                                    width: layout.posterWidth
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            .duskSuppressTVOSButtonChrome()
-
-                            PosterCardText(
-                                title: season.title,
-                                subtitle: viewModel.seasonSubtitle(season),
-                                width: layout.posterWidth
-                            )
-                        }
-                        .frame(width: layout.posterWidth, alignment: .topLeading)
-                        .contextMenu {
+                        PosterNavigationCard(
+                            route: AppNavigationRoute.media(type: .season, ratingKey: season.ratingKey),
+                            imageURL: viewModel.seasonPosterURL(season, width: imageWidth, height: imageHeight),
+                            title: season.title,
+                            subtitle: viewModel.seasonSubtitle(season),
+                            progress: viewModel.seasonProgress(season),
+                            width: layout.posterWidth
+                        ) {
                             seasonContextMenu(season)
                         }
-                        #else
-                        NavigationLink(value: AppNavigationRoute.media(type: .season, ratingKey: season.ratingKey)) {
-                            PosterCard(
-                                imageURL: viewModel.seasonPosterURL(season, width: imageWidth, height: imageHeight),
-                                title: season.title,
-                                subtitle: viewModel.seasonSubtitle(season),
-                                progress: viewModel.seasonProgress(season),
-                                width: layout.posterWidth
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .duskSuppressTVOSButtonChrome()
-                        .contextMenu {
-                            seasonContextMenu(season)
-                        }
-                        #endif
                     }
                 }
                 .padding(.horizontal, horizontalPadding)

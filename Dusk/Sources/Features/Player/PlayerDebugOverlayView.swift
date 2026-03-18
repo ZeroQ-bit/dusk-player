@@ -42,6 +42,8 @@ struct PlayerDebugOverlayView: View {
         [
             DebugOverlayEntry(label: "Engine", value: debugInfo.engineLabel),
             DebugOverlayEntry(label: "Mode", value: debugInfo.decisionLabel),
+            DebugOverlayEntry(label: "Attempt", value: debugInfo.attemptLabel),
+            DebugOverlayEntry(label: "Resolver", value: debugInfo.resolverLabel),
             DebugOverlayEntry(label: "Transcode", value: debugInfo.transcodeLabel),
             DebugOverlayEntry(label: "Container", value: debugInfo.containerLabel),
             DebugOverlayEntry(label: "Bitrate", value: debugInfo.bitrateLabel),
@@ -51,6 +53,7 @@ struct PlayerDebugOverlayView: View {
             DebugOverlayEntry(label: "File", value: debugInfo.fileSizeLabel),
             DebugOverlayEntry(label: "Subtitles", value: debugInfo.subtitleLabel),
             DebugOverlayEntry(label: "State", value: stateLabel),
+            DebugOverlayEntry(label: "URL", value: debugInfo.urlLabel),
         ]
     }
 

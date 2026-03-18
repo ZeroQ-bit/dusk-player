@@ -1,6 +1,12 @@
 import AVFoundation
 import CoreMedia
+import OSLog
 import SwiftUI
+
+private let avPlayerEngineLogger = Logger(
+    subsystem: Bundle.main.bundleIdentifier ?? "Dusk",
+    category: "AVPlayerEngine"
+)
 
 /// Native AVPlayer-based playback engine for MP4/MOV with standard codecs.
 @MainActor @Observable
@@ -41,6 +47,7 @@ final class AVPlayerEngine: PlaybackEngine {
 
     private var pendingStartPosition: TimeInterval?
     private var hasReportedPlaybackEnded = false
+    private var currentAttemptContext: PlaybackAttemptContext?
 
     // MARK: - Init
 
@@ -64,10 +71,11 @@ final class AVPlayerEngine: PlaybackEngine {
 
     // MARK: - Lifecycle
 
-    func load(url: URL, startPosition: TimeInterval?) {
+    func load(source: PlaybackSource) {
         removeTimeObserver()
         removePlaybackEndedObserver()
 
+        currentAttemptContext = source.context
         state = .loading
         error = nil
         isBuffering = true
@@ -81,10 +89,14 @@ final class AVPlayerEngine: PlaybackEngine {
         subtitleGroup = nil
         selectedAudioTrackID = nil
         selectedSubtitleTrackID = nil
-        pendingStartPosition = startPosition
+        pendingStartPosition = source.startPosition
         hasReportedPlaybackEnded = false
 
-        let item = AVPlayerItem(url: url)
+        avPlayerEngineLogger.notice(
+            "Playback attempt \(source.context.attemptLabel, privacy: .public) starting in AVPlayer for ratingKey \(source.context.ratingKey, privacy: .public), media \(source.context.mediaID, privacy: .public), part \(source.context.partID, privacy: .public), URL \(source.context.sanitizedDirectPlayURL, privacy: .public)"
+        )
+
+        let item = AVPlayerItem(url: source.url)
         item.textStyleRules = subtitleTextStyleRules
         player.replaceCurrentItem(with: item)
         observePlaybackEnd(for: item)
@@ -118,6 +130,7 @@ final class AVPlayerEngine: PlaybackEngine {
         selectedAudioTrackID = nil
         selectedSubtitleTrackID = nil
         hasReportedPlaybackEnded = false
+        currentAttemptContext = nil
     }
 
     func seek(to position: TimeInterval) {
@@ -177,6 +190,11 @@ final class AVPlayerEngine: PlaybackEngine {
     private func handleItemStatus(_ status: AVPlayerItem.Status?, itemError: Error?) {
         switch status {
         case .readyToPlay:
+            if let currentAttemptContext {
+                avPlayerEngineLogger.notice(
+                    "Playback attempt \(currentAttemptContext.attemptLabel, privacy: .public) AVPlayer item ready"
+                )
+            }
             Task {
                 await loadDurationAndTracks()
                 if let start = pendingStartPosition, start > 0 {
@@ -187,6 +205,11 @@ final class AVPlayerEngine: PlaybackEngine {
             }
         case .failed:
             let msg = itemError?.localizedDescription ?? "Unknown playback error"
+            if let currentAttemptContext {
+                avPlayerEngineLogger.error(
+                    "Playback attempt \(currentAttemptContext.attemptLabel, privacy: .public) AVPlayer failed: \(msg, privacy: .public)"
+                )
+            }
             error = .unknown(msg)
             state = .error
             isBuffering = false
@@ -258,6 +281,11 @@ final class AVPlayerEngine: PlaybackEngine {
     private func handlePlaybackEnded() {
         guard !hasReportedPlaybackEnded else { return }
         hasReportedPlaybackEnded = true
+        if let currentAttemptContext {
+            avPlayerEngineLogger.notice(
+                "Playback attempt \(currentAttemptContext.attemptLabel, privacy: .public) AVPlayer reached end of playback"
+            )
+        }
         currentTime = duration
         state = .stopped
         isBuffering = false

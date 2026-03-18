@@ -1,64 +1,10 @@
 import SwiftUI
 
-enum AppNavigationRoute: Hashable {
-    case library(PlexLibrary)
-    case libraryRecommendations(PlexLibrary)
-    case hub(PlexHub)
-    case media(type: PlexMediaType, ratingKey: String)
-    case person(PlexPersonReference)
-
-    static func destination(for item: PlexItem) -> Self {
-        if let person = PlexPersonReference(item: item) {
-            return .person(person)
-        }
-
-        return .media(type: item.type, ratingKey: item.ratingKey)
-    }
-}
-
-struct AppNavigationDestinationView: View {
-    @Environment(PlexService.self) private var plexService
-
-    let route: AppNavigationRoute
-
-    @ViewBuilder
-    var body: some View {
-        switch route {
-        case .library(let library):
-            LibraryItemsView(library: library, plexService: plexService)
-        case .libraryRecommendations(let library):
-            LibraryRecommendationsView(
-                library: library,
-                plexService: plexService,
-                navigationTitle: library.title
-            )
-        case .hub(let hub):
-            HomeHubItemsView(hub: hub, plexService: plexService)
-        case let .media(type, ratingKey):
-            MediaDetailDestinationView(
-                type: type,
-                ratingKey: ratingKey,
-                plexService: plexService
-            )
-        case .person(let person):
-            ActorDetailView(person: person, plexService: plexService)
-        }
-    }
-}
-
-extension View {
-    func duskAppNavigationDestinations() -> some View {
-        navigationDestination(for: AppNavigationRoute.self) { route in
-            AppNavigationDestinationView(route: route)
-        }
-    }
-}
-
 /// The main tab shell shown after authentication and server connection.
 struct MainTabView: View {
     @Environment(PlexService.self) private var plexService
     @Environment(PlaybackCoordinator.self) private var playback
-    @State private var selectedTab: Tab = .home
+    @State private var selectedTab: MainTabItem = .home
     @State private var homePath = NavigationPath()
     @State private var moviesPath = NavigationPath()
     @State private var showsPath = NavigationPath()
@@ -66,45 +12,10 @@ struct MainTabView: View {
     @State private var settingsPath = NavigationPath()
     @State private var librariesViewModel: LibrariesViewModel?
 
-    private enum Tab: Hashable, Identifiable {
-        case home
-        case library(PlexLibraryType)
-        case search
-        case settings
-
-        var id: Self { self }
-
-        var title: String {
-            switch self {
-            case .home:
-                "Home"
-            case .library(let libraryType):
-                libraryType.tabTitle
-            case .search:
-                "Search"
-            case .settings:
-                "Settings"
-            }
-        }
-
-        var systemImage: String {
-            switch self {
-            case .home:
-                "house.fill"
-            case .library(let libraryType):
-                libraryType.systemImage
-            case .search:
-                "magnifyingglass"
-            case .settings:
-                "gearshape"
-            }
-        }
-    }
-
     var body: some View {
         @Bindable var bindablePlayback = playback
 
-        tabView
+        shellView
             .task {
                 if librariesViewModel == nil {
                     librariesViewModel = LibrariesViewModel(plexService: plexService)
@@ -126,7 +37,7 @@ struct MainTabView: View {
             }
     }
 
-    private var tabSelection: Binding<Tab> {
+    private var tabSelection: Binding<MainTabItem> {
         Binding(
             get: { selectedTab },
             set: { newTab in
@@ -135,27 +46,24 @@ struct MainTabView: View {
         )
     }
 
-    private var tabView: some View {
-        TabView(selection: tabSelection) {
-            ForEach(availableTabs) { tab in
-                tabRootView(for: tab)
-                    .tag(tab)
-                    .tabItem {
-                        Label(tab.title, systemImage: tab.systemImage)
-                    }
-            }
-        }
+    @ViewBuilder
+    private var shellView: some View {
+        #if os(tvOS)
+        MainTabTVShell(tabs: availableTabs, selection: tabSelection, content: tabRootView(for:))
+        #else
+        MainTabIOSShell(tabs: availableTabs, selection: tabSelection, content: tabRootView(for:))
+        #endif
     }
 
-    private var availableTabs: [Tab] {
-        var tabs: [Tab] = [.home]
-        tabs += PlexLibraryType.allCases.map(Tab.library)
+    private var availableTabs: [MainTabItem] {
+        var tabs: [MainTabItem] = [.home]
+        tabs += PlexLibraryType.allCases.map(MainTabItem.library)
         tabs += [.search, .settings]
         return tabs
     }
 
     @ViewBuilder
-    private func tabRootView(for tab: Tab) -> some View {
+    private func tabRootView(for tab: MainTabItem) -> some View {
         switch tab {
         case .home:
             HomeView(path: $homePath)
@@ -181,7 +89,7 @@ struct MainTabView: View {
         }
     }
 
-    private func activate(_ tab: Tab) {
+    private func activate(_ tab: MainTabItem) {
         if selectedTab == tab {
             popToRoot(for: tab)
             return
@@ -190,7 +98,7 @@ struct MainTabView: View {
         selectedTab = tab
     }
 
-    private func popToRoot(for tab: Tab) {
+    private func popToRoot(for tab: MainTabItem) {
         guard !path(for: tab).isEmpty else { return }
 
         withAnimation {
@@ -198,7 +106,7 @@ struct MainTabView: View {
         }
     }
 
-    private func path(for tab: Tab) -> NavigationPath {
+    private func path(for tab: MainTabItem) -> NavigationPath {
         switch tab {
         case .home:
             homePath
@@ -213,7 +121,7 @@ struct MainTabView: View {
         }
     }
 
-    private func setPath(_ path: NavigationPath, for tab: Tab) {
+    private func setPath(_ path: NavigationPath, for tab: MainTabItem) {
         switch tab {
         case .home:
             homePath = path

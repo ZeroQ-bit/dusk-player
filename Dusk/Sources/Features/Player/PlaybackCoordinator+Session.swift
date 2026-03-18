@@ -1,4 +1,10 @@
 import Foundation
+import OSLog
+
+private let playbackSessionLogger = Logger(
+    subsystem: Bundle.main.bundleIdentifier ?? "Dusk",
+    category: "PlaybackSession"
+)
 
 extension PlaybackCoordinator {
     @discardableResult
@@ -14,25 +20,49 @@ extension PlaybackCoordinator {
 
         do {
             let details = try await plexService.getMediaDetails(ratingKey: ratingKey)
+            let attemptID = UUID()
 
             guard let media = resolveMediaVersion(
                     in: details,
                     selectedMediaID: selectedMediaID
                   ),
                   let part = media.parts.first else {
+                playbackSessionLogger.error(
+                    "Playback attempt failed before engine selection for ratingKey \(ratingKey, privacy: .public): no playable media version was available"
+                )
                 loadError = "No playable media found."
                 return false
             }
 
             guard let url = plexService.directPlayURL(for: part) else {
+                playbackSessionLogger.error(
+                    "Playback attempt failed before engine selection for ratingKey \(ratingKey, privacy: .public): could not construct direct play URL for media \(media.id, privacy: .public), part \(part.id, privacy: .public)"
+                )
                 loadError = "Could not construct playback URL."
                 return false
             }
 
-            let engineType = StreamResolver.resolve(
+            let resolverDecision = StreamResolver.evaluate(
                 media: media,
                 forceAVPlayer: preferences.forceAVPlayer,
                 forceVLCKit: preferences.forceVLCKit
+            )
+            let engineType = resolverDecision.engine
+            let sanitizedURL = plexService.sanitizedPlaybackURLString(for: url)
+            let startPosition = startPositionOverride ?? details.viewOffset.map { TimeInterval($0) / 1000.0 }
+            let attemptContext = PlaybackAttemptContext(
+                attemptID: attemptID,
+                title: details.title,
+                ratingKey: ratingKey,
+                engine: engineType,
+                resolverReason: resolverDecision.reason,
+                mediaID: media.id,
+                partID: part.id,
+                sanitizedDirectPlayURL: sanitizedURL
+            )
+
+            playbackSessionLogger.notice(
+                "Playback attempt \(attemptContext.attemptLabel, privacy: .public) prepared for ratingKey \(ratingKey, privacy: .public), title \(details.title, privacy: .public), engine \(String(describing: engineType), privacy: .public), media \(media.id, privacy: .public), part \(part.id, privacy: .public), startPosition=\(String(describing: startPosition), privacy: .public), reason \(resolverDecision.reason, privacy: .public), URL \(sanitizedURL, privacy: .public)"
             )
 
             let newEngine = PlaybackEngineFactory.makeEngine(
@@ -55,14 +85,18 @@ extension PlaybackCoordinator {
             engine = newEngine
             playbackSource = PlaybackSource(
                 url: url,
-                startPosition: startPositionOverride ?? details.viewOffset.map { TimeInterval($0) / 1000.0 }
+                startPosition: startPosition,
+                context: attemptContext
             )
             debugInfo = PlaybackDebugInfo(
                 title: details.title,
                 engine: engineType,
                 decision: .directPlay,
                 media: media,
-                part: part
+                part: part,
+                attemptID: attemptID,
+                resolverReason: resolverDecision.reason,
+                sanitizedDirectPlayURL: sanitizedURL
             )
             playerPresentationID = UUID()
             startTimelineReporting()
@@ -73,6 +107,9 @@ extension PlaybackCoordinator {
 
             return true
         } catch {
+            playbackSessionLogger.error(
+                "Playback attempt failed for ratingKey \(ratingKey, privacy: .public): \(error.localizedDescription, privacy: .public)"
+            )
             loadError = error.localizedDescription
             return false
         }

@@ -67,12 +67,30 @@ extension View {
     @ViewBuilder
     func duskTVOSFocusEffectShape<S: Shape>(_ shape: S) -> some View {
         #if os(tvOS)
-        self
-            .contentShape(.interaction, shape)
-            .contentShape(.hoverEffect, shape)
+        modifier(DuskTVFocusEffectModifier(shape: shape))
         #else
         self
         #endif
+    }
+}
+
+private struct DuskTVFocusEffectModifier<S: Shape>: ViewModifier {
+    @Environment(\.isFocused) private var isFocused
+
+    let shape: S
+
+    func body(content: Content) -> some View {
+        content
+            .contentShape(.interaction, shape)
+            .contentShape(.hoverEffect, shape)
+            .hoverEffect(.highlight)
+            .scaleEffect(isFocused ? 1.05 : 1.0)
+            .shadow(
+                color: isFocused ? Color.duskAccent.opacity(0.30) : .clear,
+                radius: isFocused ? 20 : 0,
+                y: isFocused ? 10 : 0
+            )
+            .animation(.easeOut(duration: 0.18), value: isFocused)
     }
 }
 

@@ -9,6 +9,11 @@ import Foundation
 /// - **VLCKit** for everything else: MKV/AVI/WMV containers, DTS/TrueHD audio,
 ///   PGS/ASS/SSA subtitles, or any combination outside the AVPlayer set.
 enum StreamResolver {
+    struct Decision: Sendable {
+        let engine: PlaybackEngineType
+        let reason: String
+    }
+
     // MARK: - AVPlayer-Compatible Codec Sets
 
     private static let avContainers: Set<String> = ["mp4", "mov", "m4v"]
@@ -84,25 +89,53 @@ enum StreamResolver {
         forceAVPlayer: Bool = false,
         forceVLCKit: Bool = false
     ) -> PlaybackEngineType {
-        if forceAVPlayer { return .avPlayer }
-        if forceVLCKit { return .vlcKit }
+        evaluate(
+            media: media,
+            forceAVPlayer: forceAVPlayer,
+            forceVLCKit: forceVLCKit
+        ).engine
+    }
+
+    static func evaluate(
+        media: PlexMedia,
+        forceAVPlayer: Bool = false,
+        forceVLCKit: Bool = false
+    ) -> Decision {
+        if forceAVPlayer {
+            return Decision(engine: .avPlayer, reason: "User preference forced AVPlayer")
+        }
+        if forceVLCKit {
+            return Decision(engine: .vlcKit, reason: "User preference forced VLCKit")
+        }
 
         // Container check
         guard let container = media.container?.lowercased(),
               avContainers.contains(container) else {
-            return .vlcKit
+            let unsupportedContainer = media.container?.uppercased() ?? "unknown"
+            return Decision(
+                engine: .vlcKit,
+                reason: "Container \(unsupportedContainer) is not AVPlayer-compatible"
+            )
         }
 
         // Video codec check
         guard let videoCodec = media.videoCodec?.lowercased(),
               avVideoCodecs.contains(videoCodec) else {
-            return .vlcKit
+            let unsupportedVideoCodec = media.videoCodec?.uppercased() ?? "unknown"
+            return Decision(
+                engine: .vlcKit,
+                reason: "Video codec \(unsupportedVideoCodec) requires VLCKit"
+            )
         }
 
         // Audio codec check
         guard let audioCodec = media.audioCodec?.lowercased(),
               avAudioCodecs.contains(audioCodec) else {
-            return .vlcKit
+            let unsupportedAudioCodec = media.audioCodec?.uppercased() ?? "unknown"
+            return Decision(
+                engine: .vlcKit,
+                reason: "Audio codec \(unsupportedAudioCodec) requires VLCKit"
+            )
         }
 
         // Subtitle check — every subtitle stream must be AVPlayer-compatible.
@@ -113,12 +146,18 @@ enum StreamResolver {
             for stream in subtitleStreams {
                 guard let codec = stream.codec?.lowercased() else { continue }
                 if !avSubtitleCodecs.contains(codec) {
-                    return .vlcKit
+                    return Decision(
+                        engine: .vlcKit,
+                        reason: "Subtitle codec \(codec.uppercased()) requires VLCKit"
+                    )
                 }
             }
         }
 
-        return .avPlayer
+        return Decision(
+            engine: .avPlayer,
+            reason: "Container, codecs, and subtitles are AVPlayer-compatible"
+        )
     }
 }
 

@@ -36,6 +36,7 @@ enum SettingsSupport {
         [nil] + Array(1...10).map(Optional.some)
     }
 
+    @MainActor
     static func subtitleLanguageBinding(_ preferences: UserPreferences) -> Binding<String> {
         Binding(
             get: { preferences.defaultSubtitleLanguage ?? "" },

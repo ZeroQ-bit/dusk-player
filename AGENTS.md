@@ -10,7 +10,7 @@ This is **Dusk**, a native Swift/SwiftUI Plex client for Apple platforms. See `S
 - **Plex is the source of truth**: App is stateless beyond auth token (Keychain) and user preferences (UserDefaults). All metadata, watch state, and library data is fetched from Plex.
 - **No premature abstraction**: No `MediaProvider` protocol. Plex-specific code is fine. Keep it in `PlexService` but don't abstract until a second backend exists.
 - **SwiftUI, multi-platform**: iOS/iPadOS now, tvOS soon. Share as much UI as possible, use `#if os(tvOS)` for platform differences. macOS later via Catalyst.
-- **VLCKit is vendored**: No CocoaPods. A pinned `VLCKit.xcframework` is checked into `Frameworks/` and linked dynamically for LGPL compliance.
+- **VLCKit is vendored**: No CocoaPods. Pinned `VLCKit.xcframework` and `VLCKit-tvOS.xcframework` binaries are checked into `Frameworks/` and linked dynamically for LGPL compliance.
 - **Direct play only (v1)**: No transcoding. Fail with a clear error if the file can't be played.
 
 ## Code Style
@@ -32,7 +32,7 @@ For iOS app verification in this repo, prefer:
 xcodebuild -project Dusk.xcodeproj -scheme Dusk -configuration Debug -destination 'generic/platform=iOS Simulator' ARCHS=arm64 ONLY_ACTIVE_ARCH=YES build
 ```
 
-The vendored `VLCKit.xcframework` does not provide an `x86_64` simulator slice in this setup, so generic simulator builds without the arm64 override can fail at link time even when the Swift code is otherwise valid.
+The vendored iOS `VLCKit.xcframework` does not provide an `x86_64` simulator slice in this setup, so generic simulator builds without the arm64 override can fail at link time even when the Swift code is otherwise valid.
 
 Important: if you add, remove, or rename any source file under `Dusk/Sources`, run `xcodegen generate` before finishing. The checked-in `Dusk.xcodeproj` can otherwise be stale, which causes new Swift files to appear as "Cannot find in scope" even though they exist on disk.
 
@@ -45,7 +45,7 @@ xcodegen generate
 open Dusk.xcodeproj
 ```
 
-To refresh the vendored VLCKit binary manually, run:
+To refresh the vendored iOS/tvOS VLCKit binaries manually, run:
 
 ```bash
 ./ci_scripts/install_vlckit.sh

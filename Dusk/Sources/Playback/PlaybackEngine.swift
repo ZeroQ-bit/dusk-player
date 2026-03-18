@@ -20,7 +20,7 @@ protocol PlaybackEngine: AnyObject {
 
     /// Begin loading media from the given URL. If `startPosition` is non-nil,
     /// seek to that offset once loaded (resume playback).
-    func load(url: URL, startPosition: TimeInterval?)
+    func load(source: PlaybackSource)
     func play()
     func pause()
     func stop()
@@ -50,6 +50,7 @@ protocol PlaybackEngine: AnyObject {
     func makePlayerView() -> AnyView
 }
 
+@MainActor
 enum PlaybackSubtitleStyle {
     static var avPlayerRelativeFontSize: Int {
         switch userInterfaceIdiom {
