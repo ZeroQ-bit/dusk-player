@@ -115,17 +115,28 @@ struct HomeHeroPagerPill: View {
     let progress: Double
 
     var body: some View {
+        let pillWidth: CGFloat = isActive ? 28 : 10
+        let pillHeight: CGFloat = 10
+        let fillInset: CGFloat = 1
+        let clampedProgress = min(max(progress, 0), 1)
+
         ZStack(alignment: .leading) {
             Capsule()
                 .fill(isActive ? Color.white.opacity(0.24) : Color.white.opacity(0.28))
-                .frame(width: isActive ? 28 : 10, height: 10)
 
             if isActive {
                 Capsule()
                     .fill(Color.duskAccent)
-                    .frame(width: 28 * min(max(progress, 0), 1), height: 10)
+                    .frame(
+                        width: max((pillWidth - (fillInset * 2)) * clampedProgress, 0),
+                        height: pillHeight - (fillInset * 2)
+                    )
+                    .padding(fillInset)
+                    .clipShape(Capsule())
             }
         }
+        .frame(width: pillWidth, height: pillHeight)
+        .clipShape(Capsule())
         .overlay {
             if isActive {
                 Capsule()

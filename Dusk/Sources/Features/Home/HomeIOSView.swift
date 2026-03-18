@@ -17,13 +17,19 @@ struct HomeIOSView: View {
     @State private var isHeroRotationPaused = false
     @State private var heroRotationStartedAt = Date()
     @State private var pausedHeroRotationProgress: Double?
+    @State private var transitioningHeroIndex: Int?
+    @State private var heroSlideProgress: CGFloat = 1
+    @State private var heroSlideRevision = 0
+    @State private var heroTransitionDirection: HeroTransitionDirection = .forward
+    @State private var preloadedHeroBackdropImages: [String: UIImage] = [:]
 
-    private let heroRotationInterval: UInt64 = 5_000_000_000
+    private let heroRotationInterval: UInt64 = 6_000_000_000
 
     var body: some View {
         applyNavigationChrome(to: content, showsHero: showsCinematicHero)
             .onChange(of: heroItemIDs) { _, ids in
                 guard !ids.isEmpty else {
+                    resetHeroSlideState()
                     currentHeroIndex = 0
                     return
                 }
@@ -32,6 +38,7 @@ struct HomeIOSView: View {
                     currentHeroIndex = 0
                 }
 
+                resetHeroSlideState()
                 restartHeroRotation()
             }
             .task(id: heroRotationSeed) {
@@ -106,22 +113,101 @@ struct HomeIOSView: View {
         topInset: CGFloat
     ) -> some View {
         let index = resolvedHeroIndex(for: items)
-        let item = items[index]
         let heroWidth = containerSize.width
         let heroHeight = min(max(containerSize.height * 0.72, 520), 760) + topInset
         let backdropWidth = Int(heroWidth.rounded(.up))
         let backdropHeight = Int(heroHeight.rounded(.up))
         let contentWidth = min(max(heroWidth - 40, 0), 620)
-        let metadata = viewModel.heroMetadata(for: item)
 
         ZStack(alignment: .bottomLeading) {
-            DetailHeroBackdrop(
-                imageURL: viewModel.heroBackgroundURL(
-                    for: item,
-                    width: backdropWidth,
-                    height: backdropHeight
-                ),
-                height: heroHeight
+            ZStack(alignment: .bottomLeading) {
+                if let transitioningHeroIndex,
+                   items.indices.contains(transitioningHeroIndex) {
+                    cinematicHeroSlide(
+                        item: items[transitioningHeroIndex],
+                        heroHeight: heroHeight,
+                        backdropWidth: backdropWidth,
+                        backdropHeight: backdropHeight,
+                        contentWidth: contentWidth,
+                        topInset: topInset,
+                        reservesPagerSpace: items.count > 1
+                    )
+                    .offset(
+                        x: heroSlideOffset(
+                            for: .outgoing,
+                            width: heroWidth
+                        )
+                    )
+                    .id("outgoing-\(items[transitioningHeroIndex].ratingKey)")
+                    .zIndex(0)
+                }
+
+                if items.indices.contains(index) {
+                    cinematicHeroSlide(
+                        item: items[index],
+                        heroHeight: heroHeight,
+                        backdropWidth: backdropWidth,
+                        backdropHeight: backdropHeight,
+                        contentWidth: contentWidth,
+                        topInset: topInset,
+                        reservesPagerSpace: items.count > 1
+                    )
+                    .offset(
+                        x: heroSlideOffset(
+                            for: .incoming,
+                            width: heroWidth
+                        )
+                    )
+                    .id("incoming-\(items[index].ratingKey)")
+                    .zIndex(1)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+
+            if items.count > 1 {
+                heroPager(items: items, currentIndex: index)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 28)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+            }
+        }
+        .frame(height: heroHeight)
+        .frame(maxWidth: .infinity)
+        .clipped()
+        .contentShape(Rectangle())
+        .task(id: heroBackdropPrefetchSeed(items: items, width: backdropWidth, height: backdropHeight)) {
+            await preloadHeroBackdropImages(
+                for: items,
+                width: backdropWidth,
+                height: backdropHeight
+            )
+        }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 20)
+                .onEnded { value in
+                    handleHeroDrag(value.translation)
+                }
+        )
+    }
+
+    private func cinematicHeroSlide(
+        item: PlexItem,
+        heroHeight: CGFloat,
+        backdropWidth: Int,
+        backdropHeight: Int,
+        contentWidth: CGFloat,
+        topInset: CGFloat,
+        reservesPagerSpace: Bool
+    ) -> some View {
+        let metadata = viewModel.heroMetadata(for: item)
+
+        return ZStack(alignment: .bottomLeading) {
+            heroBackdrop(
+                for: item,
+                width: backdropWidth,
+                height: backdropHeight,
+                heroHeight: heroHeight
             )
 
             ZStack {
@@ -193,25 +279,13 @@ struct HomeIOSView: View {
                 }
 
                 heroActionButton(item: item)
-
-                if items.count > 1 {
-                    heroPager(items: items, currentIndex: index)
-                }
             }
             .padding(.horizontal, 20)
-            .padding(.bottom, 28)
+            .padding(.bottom, reservesPagerSpace ? 52 : 28)
             .padding(.top, topInset + 64)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
         }
-        .frame(height: heroHeight)
-        .frame(maxWidth: .infinity)
-        .contentShape(Rectangle())
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 20)
-                .onEnded { value in
-                    handleHeroDrag(value.translation)
-                }
-        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func heroActionButton(item: PlexItem) -> some View {
@@ -301,9 +375,11 @@ struct HomeIOSView: View {
             guard heroItemIDs.count > 1,
                   !isHeroRotationPaused else { return }
 
-            withAnimation(.easeInOut(duration: 0.7)) {
-                currentHeroIndex = (currentHeroIndex + 1) % heroItemIDs.count
-            }
+            moveHero(
+                to: (currentHeroIndex + 1) % heroItemIDs.count,
+                direction: .forward,
+                duration: 0.6
+            )
             restartHeroRotation()
         }
     }
@@ -315,9 +391,15 @@ struct HomeIOSView: View {
         }
 
         restartHeroRotation()
-        withAnimation(.easeInOut(duration: 0.5)) {
-            currentHeroIndex = index
-        }
+        moveHero(
+            to: index,
+            direction: resolvedHeroTransitionDirection(
+                from: currentHeroIndex,
+                to: index,
+                itemCount: heroItemIDs.count
+            ),
+            duration: 0.5
+        )
     }
 
     private func restartHeroRotation() {
@@ -351,9 +433,11 @@ struct HomeIOSView: View {
             nextIndex = (currentHeroIndex - 1 + heroCount) % heroCount
         }
 
-        withAnimation(.easeInOut(duration: 0.45)) {
-            currentHeroIndex = nextIndex
-        }
+        moveHero(
+            to: nextIndex,
+            direction: translation.width < 0 ? .forward : .backward,
+            duration: 0.5
+        )
     }
 
     private func resolvedHeroIndex(for items: [PlexItem]) -> Int {
@@ -428,6 +512,181 @@ struct HomeIOSView: View {
         let progress = heroRotationProgress(at: date)
         let remaining = max(0, 1 - progress) * heroRotationDuration
         return UInt64((remaining * 1_000_000_000).rounded())
+    }
+
+    private func resetHeroSlideState() {
+        heroSlideRevision += 1
+        transitioningHeroIndex = nil
+        heroSlideProgress = 1
+    }
+
+    private func heroBackdropPrefetchSeed(items: [PlexItem], width: Int, height: Int) -> String {
+        [
+            items.map(\.ratingKey).joined(separator: "|"),
+            "\(width)x\(height)"
+        ].joined(separator: "::")
+    }
+
+    private func preloadHeroBackdropImages(
+        for items: [PlexItem],
+        width: Int,
+        height: Int
+    ) async {
+        let backdropRequests = items.compactMap { item -> (String, URL)? in
+            guard let url = viewModel.heroBackgroundURL(for: item, width: width, height: height) else {
+                return nil
+            }
+
+            return (item.ratingKey, url)
+        }
+
+        let validKeys = Set(items.map(\.ratingKey))
+        await MainActor.run {
+            preloadedHeroBackdropImages = preloadedHeroBackdropImages.filter { validKeys.contains($0.key) }
+        }
+
+        guard !backdropRequests.isEmpty else { return }
+
+        var loadedImages: [String: UIImage] = [:]
+
+        await withTaskGroup(of: (String, UIImage?).self) { group in
+            for (ratingKey, url) in backdropRequests {
+                group.addTask {
+                    do {
+                        let image = try await DuskImageLoader.shared.image(for: url)
+                        return (ratingKey, image)
+                    } catch {
+                        return (ratingKey, nil)
+                    }
+                }
+            }
+
+            for await (ratingKey, image) in group {
+                if let image {
+                    loadedImages[ratingKey] = image
+                }
+            }
+        }
+
+        guard !loadedImages.isEmpty else { return }
+
+        await MainActor.run {
+            for (ratingKey, image) in loadedImages {
+                guard validKeys.contains(ratingKey) else { continue }
+                preloadedHeroBackdropImages[ratingKey] = image
+            }
+        }
+    }
+}
+
+private enum HeroTransitionDirection {
+    case forward
+    case backward
+}
+
+private enum HeroSlideRole {
+    case outgoing
+    case incoming
+}
+
+private extension HomeIOSView {
+    @ViewBuilder
+    func heroBackdrop(
+        for item: PlexItem,
+        width: Int,
+        height: Int,
+        heroHeight: CGFloat
+    ) -> some View {
+        if let image = preloadedHeroBackdropImages[item.ratingKey] {
+            GeometryReader { geometry in
+                ZStack {
+                    Color.duskSurface
+
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                        .frame(
+                            width: geometry.size.width,
+                            height: geometry.size.height,
+                            alignment: .center
+                        )
+                        .clipped()
+                }
+                .frame(width: geometry.size.width, height: geometry.size.height, alignment: .center)
+                .clipped()
+            }
+            .frame(height: heroHeight)
+            .frame(maxWidth: .infinity)
+        } else {
+            DetailHeroBackdrop(
+                imageURL: viewModel.heroBackgroundURL(
+                    for: item,
+                    width: width,
+                    height: height
+                ),
+                height: heroHeight
+            )
+        }
+    }
+
+    func moveHero(to index: Int, direction: HeroTransitionDirection, duration: TimeInterval) {
+        let previousIndex = currentHeroIndex
+        let slideRevision = heroSlideRevision + 1
+
+        heroSlideRevision = slideRevision
+        heroTransitionDirection = direction
+        transitioningHeroIndex = previousIndex
+        currentHeroIndex = index
+        heroSlideProgress = 0
+
+        withAnimation(.easeInOut(duration: duration)) {
+            heroSlideProgress = 1
+        }
+
+        Task {
+            try? await Task.sleep(
+                nanoseconds: UInt64((duration * 1_000_000_000).rounded())
+            )
+
+            await MainActor.run {
+                guard heroSlideRevision == slideRevision else { return }
+                transitioningHeroIndex = nil
+                heroSlideProgress = 1
+            }
+        }
+    }
+
+    func heroSlideOffset(for role: HeroSlideRole, width: CGFloat) -> CGFloat {
+        guard transitioningHeroIndex != nil else { return 0 }
+
+        switch (heroTransitionDirection, role) {
+        case (.forward, .outgoing):
+            return -width * heroSlideProgress
+        case (.forward, .incoming):
+            return width * (1 - heroSlideProgress)
+        case (.backward, .outgoing):
+            return width * heroSlideProgress
+        case (.backward, .incoming):
+            return -width * (1 - heroSlideProgress)
+        }
+    }
+
+    func resolvedHeroTransitionDirection(
+        from currentIndex: Int,
+        to nextIndex: Int,
+        itemCount: Int
+    ) -> HeroTransitionDirection {
+        guard itemCount > 1, currentIndex != nextIndex else { return .forward }
+
+        let forwardDistance = nextIndex >= currentIndex
+            ? nextIndex - currentIndex
+            : itemCount - currentIndex + nextIndex
+        let backwardDistance = currentIndex >= nextIndex
+            ? currentIndex - nextIndex
+            : currentIndex + itemCount - nextIndex
+
+        return forwardDistance <= backwardDistance ? .forward : .backward
     }
 }
 #endif
