@@ -1,9 +1,16 @@
 import Foundation
+import OSLog
+
+let plexAuthLogger = Logger(
+    subsystem: Bundle.main.bundleIdentifier ?? "Dusk",
+    category: "PlexAuth"
+)
 
 @MainActor
 @Observable
 final class PlexService {
     var authToken: String?
+    var authTokenUpdatedAt: Date?
     private(set) var connectedServer: PlexServer?
     var serverBaseURL: URL?
     private(set) var serverAuthToken: String?
@@ -23,6 +30,8 @@ final class PlexService {
     static let defaultsServerURLKey = "PlexServerURL"
     static let defaultsServerIDKey = "PlexServerID"
     static let defaultsServerDataKey = "PlexServerData"
+    static let authenticationPropagationRetryWindow: TimeInterval = 20
+    static let authenticationPropagationRetryAttempts = 20
 
     init() {
         let config = URLSessionConfiguration.default
@@ -44,12 +53,12 @@ final class PlexService {
 
         if let data = KeychainHelper.load(key: Self.keychainTokenKey),
            let token = String(data: data, encoding: .utf8) {
-            authToken = token
+            authToken = token.nilIfEmpty
         }
 
         if let data = KeychainHelper.load(key: Self.keychainServerTokenKey),
            let token = String(data: data, encoding: .utf8) {
-            serverAuthToken = token
+            serverAuthToken = token.nilIfEmpty
         }
 
         if let urlString = UserDefaults.standard.string(forKey: Self.defaultsServerURLKey),
@@ -62,27 +71,31 @@ final class PlexService {
             connectedServer = server
         }
 
-        if serverAuthToken == nil, let fallbackToken = connectedServer?.accessToken {
-            serverAuthToken = fallbackToken
-            KeychainHelper.save(key: Self.keychainServerTokenKey, data: Data(fallbackToken.utf8))
+        if let persistedServerToken = connectedServer?.usableAccessToken {
+            if serverAuthToken != persistedServerToken {
+                serverAuthToken = persistedServerToken
+                KeychainHelper.save(key: Self.keychainServerTokenKey, data: Data(persistedServerToken.utf8))
+            }
+        } else if let serverAuthToken {
+            KeychainHelper.save(key: Self.keychainServerTokenKey, data: Data(serverAuthToken.utf8))
         }
     }
 
     var preferredServerToken: String? {
-        serverAuthToken ?? connectedServer?.accessToken ?? authToken
+        connectedServer?.usableAccessToken ?? serverAuthToken?.nilIfEmpty
     }
 
     func setServer(_ server: PlexServer, baseURL: URL, accessToken: String?) {
         connectedServer = server
         serverBaseURL = baseURL
-        serverAuthToken = accessToken
+        serverAuthToken = accessToken?.nilIfEmpty ?? server.usableAccessToken
         UserDefaults.standard.set(baseURL.absoluteString, forKey: Self.defaultsServerURLKey)
         UserDefaults.standard.set(server.clientIdentifier, forKey: Self.defaultsServerIDKey)
         if let data = try? encoder.encode(server) {
             UserDefaults.standard.set(data, forKey: Self.defaultsServerDataKey)
         }
-        if let accessToken {
-            KeychainHelper.save(key: Self.keychainServerTokenKey, data: Data(accessToken.utf8))
+        if let serverAuthToken {
+            KeychainHelper.save(key: Self.keychainServerTokenKey, data: Data(serverAuthToken.utf8))
         } else {
             KeychainHelper.delete(key: Self.keychainServerTokenKey)
         }

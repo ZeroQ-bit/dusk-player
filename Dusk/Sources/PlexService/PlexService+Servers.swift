@@ -1,44 +1,59 @@
 import Foundation
+import OSLog
 
 extension PlexService {
     func discoverServers() async throws -> [PlexServer] {
         guard authToken != nil else { throw PlexServiceError.notAuthenticated }
 
-        guard let url = buildURL(
-            base: Self.plexTVBase,
-            path: "/api/v2/resources",
-            queryItems: [
-                URLQueryItem(name: "includeHttps", value: "1"),
-                URLQueryItem(name: "includeRelay", value: "1"),
-            ]
-        ) else { throw PlexServiceError.invalidURL }
+        return try await retryAfterFreshAuthentication {
+            guard let url = buildURL(
+                base: Self.plexTVBase,
+                path: "/api/v2/resources",
+                queryItems: [
+                    URLQueryItem(name: "includeHttps", value: "1"),
+                    URLQueryItem(name: "includeRelay", value: "1"),
+                ]
+            ) else { throw PlexServiceError.invalidURL }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        applyHeaders(to: &request, token: authToken)
-        let data = try await executeRequest(request)
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            applyHeaders(to: &request, token: authToken)
+            let data = try await executeRequest(request)
 
-        guard let jsonArray = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
-            throw PlexServiceError.decodingError("Expected JSON array from resources endpoint")
-        }
-
-        return jsonArray.compactMap { json -> PlexServer? in
-            guard let provides = json["provides"] as? String, provides.contains("server") else {
-                return nil
+            guard let jsonArray = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+                throw PlexServiceError.decodingError("Expected JSON array from resources endpoint")
             }
-            guard let itemData = try? JSONSerialization.data(withJSONObject: json) else {
-                return nil
+
+            let servers = jsonArray.compactMap { json -> PlexServer? in
+                guard let provides = json["provides"] as? String, provides.contains("server") else {
+                    return nil
+                }
+                guard let itemData = try? JSONSerialization.data(withJSONObject: json) else {
+                    return nil
+                }
+                return try? decoder.decode(PlexServer.self, from: itemData)
             }
-            return try? decoder.decode(PlexServer.self, from: itemData)
+
+            if isAuthenticationFresh,
+               !servers.isEmpty,
+               servers.allSatisfy({ $0.usableAccessToken == nil }) {
+                plexAuthLogger.notice("Server discovery returned servers without usable access tokens during bootstrap window")
+                throw AuthenticationBootstrapError.waitingForPropagation
+            }
+
+            return servers
         }
     }
 
     func connect(to server: PlexServer) async throws {
-        let candidates = connectionCandidates(for: server)
-        var lastFailure = "Could not connect to \(server.name)"
+        try await retryAfterFreshAuthentication {
+            let server = try await connectableServer(from: server)
+            let candidates = connectionCandidates(for: server)
+            let token = try serverAccessToken(for: server)
+            var lastFailure = "Could not connect to \(server.name)"
+            var receivedUnauthorized = false
 
-        for candidate in candidates {
-            for token in connectionProbeTokens(for: server) {
+            for candidate in candidates {
                 var request = URLRequest(url: candidate.probeURL)
                 request.httpMethod = "GET"
                 request.timeoutInterval = candidate.connection.local ? 20 : 8
@@ -51,10 +66,22 @@ extension PlexService {
                         continue
                     }
 
+                    if http.statusCode == 401 {
+                        receivedUnauthorized = true
+                        lastFailure = "HTTP 401 from \(server.name)"
+                        continue
+                    }
+
                     guard (200...299).contains(http.statusCode) else {
                         lastFailure = "HTTP \(http.statusCode) from \(server.name)"
                         continue
                     }
+
+                    try await validateServerAuthorization(
+                        baseURL: candidate.baseURL,
+                        token: token,
+                        timeout: request.timeoutInterval
+                    )
 
                     setServer(server, baseURL: candidate.baseURL, accessToken: token)
                     return
@@ -62,9 +89,16 @@ extension PlexService {
                     lastFailure = error.localizedDescription
                 }
             }
-        }
 
-        throw PlexServiceError.networkError(lastFailure)
+            if receivedUnauthorized {
+                plexAuthLogger.notice("Server connect received 401 for \(server.name, privacy: .public) during bootstrap=\(self.isAuthenticationFresh, privacy: .public)")
+                throw isAuthenticationFresh
+                    ? AuthenticationBootstrapError.waitingForPropagation
+                    : PlexServiceError.unauthorized
+            }
+
+            throw PlexServiceError.networkError(lastFailure)
+        }
     }
 
     func connectionCandidates(for server: PlexServer) -> [ConnectionCandidate] {
@@ -122,18 +156,82 @@ extension PlexService {
         )
     }
 
-    func connectionProbeTokens(for server: PlexServer) -> [String?] {
-        var tokens: [String?] = []
+    private func connectableServer(from server: PlexServer) async throws -> PlexServer {
+        if isAuthenticationFresh {
+            let refreshedServers = try await discoverServers()
 
-        if let serverToken = server.accessToken {
-            tokens.append(serverToken)
+            if let refreshedServer = refreshedServers.first(where: { $0.clientIdentifier == server.clientIdentifier }) {
+                guard refreshedServer.usableAccessToken != nil else {
+                    throw AuthenticationBootstrapError.waitingForPropagation
+                }
+
+                return refreshedServer
+            }
         }
 
-        if let authToken, tokens.contains(authToken) == false {
-            tokens.append(authToken)
+        guard server.usableAccessToken != nil else {
+            throw PlexServiceError.networkError("Missing server access token for \(server.name)")
         }
 
-        return tokens.isEmpty ? [nil] : tokens
+        return server
+    }
+
+    func refreshConnectedServerAuthorization() async throws {
+        guard let connectedServer else {
+            throw PlexServiceError.noServerConnected
+        }
+
+        plexAuthLogger.notice("Refreshing server authorization for \(connectedServer.name, privacy: .public)")
+
+        let refreshedServers = try await discoverServers()
+        guard let refreshedServer = refreshedServers.first(where: { $0.clientIdentifier == connectedServer.clientIdentifier }) else {
+            throw PlexServiceError.noServerConnected
+        }
+
+        try await connect(to: refreshedServer)
+        plexAuthLogger.notice("Refreshed server authorization for \(connectedServer.name, privacy: .public)")
+    }
+
+    private func validateServerAuthorization(
+        baseURL: URL,
+        token: String,
+        timeout: TimeInterval
+    ) async throws {
+        guard let validationURL = buildURL(base: baseURL.absoluteString, path: "/library/sections") else {
+            throw PlexServiceError.invalidURL
+        }
+
+        var request = URLRequest(url: validationURL)
+        request.httpMethod = "GET"
+        request.timeoutInterval = timeout
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        applyHeaders(to: &request, token: token)
+
+        let (_, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw PlexServiceError.networkError("Invalid validation response")
+        }
+
+        switch http.statusCode {
+        case 200...299:
+            return
+        case 401:
+            throw PlexServiceError.unauthorized
+        default:
+            throw PlexServiceError.httpError(statusCode: http.statusCode)
+        }
+    }
+
+    private func serverAccessToken(for server: PlexServer) throws -> String {
+        if let token = server.usableAccessToken {
+            return token
+        }
+
+        if isAuthenticationFresh {
+            throw AuthenticationBootstrapError.waitingForPropagation
+        }
+
+        throw PlexServiceError.unauthorized
     }
 }
 

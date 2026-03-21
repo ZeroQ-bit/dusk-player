@@ -204,7 +204,7 @@ struct SignInView: View {
             #if os(tvOS)
             let linkPin = try await plexService.generatePin()
             linkPinCode = linkPin.code
-            startPolling(pinIDs: [linkPin.id])
+            startPolling(primaryPinID: linkPin.id)
             #else
             // Plex uses a longer-lived "strong" PIN for browser approval, but
             // plex.tv/link expects the short code flow, so we keep both active.
@@ -217,7 +217,7 @@ struct SignInView: View {
                 openURL(url)
             }
 
-            startPolling(pinIDs: [browserPin.id, linkPin?.id].compactMap { $0 })
+            startPolling(primaryPinID: browserPin.id, fallbackPinID: linkPin?.id)
             #endif
         } catch {
             self.error = error.localizedDescription
@@ -225,21 +225,30 @@ struct SignInView: View {
         }
     }
 
-    private func startPolling(pinIDs: [Int]) {
+    private func startPolling(primaryPinID: Int, fallbackPinID: Int? = nil) {
         pollingTask?.cancel()
         pollingTask = Task {
-            for _ in 0..<120 {
+            let fallbackActivationAttempt = 15
+
+            for attempt in 0..<120 {
                 guard !Task.isCancelled else { break }
                 try? await Task.sleep(for: .seconds(1))
                 guard !Task.isCancelled else { break }
 
-                for pinID in pinIDs {
-                    if let token = try? await plexService.checkPin(pinID) {
+                if let token = try? await plexService.checkPin(primaryPinID) {
+                    plexService.setAuthToken(token)
+                    isSigningIn = false
+                    linkPinCode = nil
+                    return
+                }
+
+                if attempt >= fallbackActivationAttempt,
+                   let fallbackPinID,
+                   let token = try? await plexService.checkPin(fallbackPinID) {
                         plexService.setAuthToken(token)
                         isSigningIn = false
                         linkPinCode = nil
                         return
-                    }
                 }
             }
 

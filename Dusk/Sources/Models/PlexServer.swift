@@ -47,6 +47,10 @@ struct PlexServer: Codable, Sendable, Identifiable {
             return false
         }
     }
+
+    var usableAccessToken: String? {
+        accessToken?.nilIfEmpty
+    }
 }
 
 /// A single connection endpoint for a Plex server (local, remote, or relay).

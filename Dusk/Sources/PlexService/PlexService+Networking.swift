@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -52,12 +53,45 @@ extension PlexService {
             throw PlexServiceError.invalidURL
         }
 
+        if preferredServerToken == nil {
+            try await recoverServerAuthorizationIfPossible()
+        }
+
+        do {
+            return try await sendRawServerRequest(method: method, url: url)
+        } catch let error as PlexServiceError where error == .unauthorized {
+            plexAuthLogger.notice("Server request unauthorized for \(url.path, privacy: .public); attempting token refresh")
+            try await recoverServerAuthorizationIfPossible()
+            do {
+                return try await sendRawServerRequest(method: method, url: url)
+            } catch let retryError as PlexServiceError where retryError == .unauthorized {
+                clearServer()
+                throw retryError
+            }
+        }
+    }
+
+    private func sendRawServerRequest(method: String, url: URL) async throws -> Data {
+        guard let serverToken = preferredServerToken else {
+            throw isAuthenticationFresh ? PlexServiceError.authenticationPending : PlexServiceError.unauthorized
+        }
+
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.cachePolicy = .reloadIgnoringLocalCacheData
-        applyHeaders(to: &request, token: preferredServerToken)
+        applyHeaders(to: &request, token: serverToken)
 
         return try await executeRequest(request)
+    }
+
+    private func recoverServerAuthorizationIfPossible() async throws {
+        guard authToken != nil else {
+            throw PlexServiceError.unauthorized
+        }
+
+        try await retryAfterFreshAuthentication {
+            try await refreshConnectedServerAuthorization()
+        }
     }
 
     func fetchMetadata<T: Decodable>(
@@ -108,26 +142,28 @@ extension PlexService {
     }
 
     func executeRequest(_ request: URLRequest) async throws -> Data {
-        let data: Data
-        let response: URLResponse
+        try await retryAfterFreshAuthentication {
+            let data: Data
+            let response: URLResponse
 
-        do {
-            (data, response) = try await session.data(for: request)
-        } catch {
-            throw PlexServiceError.networkError(error.localizedDescription)
-        }
+            do {
+                (data, response) = try await session.data(for: request)
+            } catch {
+                throw PlexServiceError.networkError(error.localizedDescription)
+            }
 
-        guard let http = response as? HTTPURLResponse else {
-            throw PlexServiceError.networkError("Invalid response")
-        }
+            guard let http = response as? HTTPURLResponse else {
+                throw PlexServiceError.networkError("Invalid response")
+            }
 
-        switch http.statusCode {
-        case 200...299:
-            return data
-        case 401:
-            throw PlexServiceError.unauthorized
-        default:
-            throw PlexServiceError.httpError(statusCode: http.statusCode)
+            switch http.statusCode {
+            case 200...299:
+                return data
+            case 401:
+                throw PlexServiceError.unauthorized
+            default:
+                throw PlexServiceError.httpError(statusCode: http.statusCode)
+            }
         }
     }
 

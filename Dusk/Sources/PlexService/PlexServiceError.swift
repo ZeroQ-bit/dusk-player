@@ -5,6 +5,7 @@ enum PlexServiceError: Error, Sendable, Equatable, LocalizedError {
     case notAuthenticated
     case noServerConnected
     case invalidURL
+    case authenticationPending
     case unauthorized
     case httpError(statusCode: Int)
     case decodingError(String)
@@ -20,6 +21,8 @@ enum PlexServiceError: Error, Sendable, Equatable, LocalizedError {
             "No Plex server connected."
         case .invalidURL:
             "Invalid URL."
+        case .authenticationPending:
+            "Finishing Plex sign-in. Please wait a moment and try again."
         case .unauthorized:
             "Authentication expired. Please sign in again."
         case .httpError(let code):
