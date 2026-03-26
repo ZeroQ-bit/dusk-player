@@ -58,11 +58,11 @@ struct PlayerControlsTVOverlay: View {
         HStack(alignment: .top, spacing: 18) {
             Button(action: onDismiss) {
                 Image(systemName: "xmark")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 56, height: 56)
-                    .background(.ultraThinMaterial, in: Circle())
+                    .font(.body.weight(.semibold))
             }
+            .buttonStyle(.glass)
+            .controlSize(.small)
+            .tint(.white)
             .focused($focusedControl, equals: .close)
 
             if let header = context.mediaHeader {
@@ -84,7 +84,8 @@ struct PlayerControlsTVOverlay: View {
 
             transportButton(
                 systemImage: isPlaying ? "pause.fill" : "play.fill",
-                font: .system(size: 46, weight: .medium)
+                font: .system(size: 30, weight: .semibold),
+                isProminent: true
             ) {
                 viewModel.togglePlayPause()
             }
@@ -148,6 +149,9 @@ struct PlayerControlsTVOverlay: View {
             )
         }
         .disabled(viewModel.subtitleTracks.isEmpty)
+        .buttonStyle(.glass)
+        .controlSize(.small)
+        .tint(.white)
         .focused($focusedControl, equals: .subtitles)
     }
 
@@ -176,25 +180,34 @@ struct PlayerControlsTVOverlay: View {
             )
         }
         .disabled(viewModel.audioTracks.isEmpty)
+        .buttonStyle(.glass)
+        .controlSize(.small)
+        .tint(.white)
         .focused($focusedControl, equals: .audio)
     }
 
     private func transportButton(
         systemImage: String,
-        font: Font = .system(size: 34, weight: .medium),
+        font: Font = .system(size: 22, weight: .semibold),
+        isProminent: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(font)
-                .foregroundStyle(.white)
-                .frame(width: 88, height: 88)
-                .background(.ultraThinMaterial, in: Circle())
-                .overlay {
-                    Circle()
-                        .strokeBorder(.white.opacity(0.08), lineWidth: 1)
+        Group {
+            if isProminent {
+                Button(action: action) {
+                    Image(systemName: systemImage)
+                        .font(font)
                 }
+                .buttonStyle(.glassProminent)
+            } else {
+                Button(action: action) {
+                    Image(systemName: systemImage)
+                        .font(font)
+                }
+                .buttonStyle(.glass)
+            }
         }
+        .tint(.white)
     }
 
     private func trackMenuLabel(
@@ -202,17 +215,15 @@ struct PlayerControlsTVOverlay: View {
         title: String,
         isEnabled: Bool
     ) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.body)
+        Label {
             Text(title)
-                .font(.subheadline.weight(.medium))
+                .font(.footnote.weight(.medium))
                 .lineLimit(1)
+        } icon: {
+            Image(systemName: icon)
+                .font(.footnote)
         }
-        .foregroundStyle(.white.opacity(isEnabled ? 1 : 0.72))
-        .padding(.horizontal, 18)
-        .padding(.vertical, 14)
-        .background(.white.opacity(0.12), in: Capsule())
+        .foregroundStyle(isEnabled ? .primary : .secondary)
     }
 
     private func trackMenuItem(
