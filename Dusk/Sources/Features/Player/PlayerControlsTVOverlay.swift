@@ -63,9 +63,6 @@ struct PlayerControlsTVOverlay: View {
                     .frame(width: 56, height: 56)
                     .background(.ultraThinMaterial, in: Circle())
             }
-            .buttonStyle(.plain)
-            .duskSuppressTVOSButtonChrome()
-            .duskTVOSFocusEffectShape(Circle())
             .focused($focusedControl, equals: .close)
 
             if let header = context.mediaHeader {
@@ -152,8 +149,6 @@ struct PlayerControlsTVOverlay: View {
         }
         .disabled(viewModel.subtitleTracks.isEmpty)
         .focused($focusedControl, equals: .subtitles)
-        .duskSuppressTVOSButtonChrome()
-        .duskTVOSFocusEffectShape(Capsule())
     }
 
     private var audioMenu: some View {
@@ -182,8 +177,6 @@ struct PlayerControlsTVOverlay: View {
         }
         .disabled(viewModel.audioTracks.isEmpty)
         .focused($focusedControl, equals: .audio)
-        .duskSuppressTVOSButtonChrome()
-        .duskTVOSFocusEffectShape(Capsule())
     }
 
     private func transportButton(
@@ -202,9 +195,6 @@ struct PlayerControlsTVOverlay: View {
                         .strokeBorder(.white.opacity(0.08), lineWidth: 1)
                 }
         }
-        .buttonStyle(.plain)
-        .duskSuppressTVOSButtonChrome()
-        .duskTVOSFocusEffectShape(Circle())
     }
 
     private func trackMenuLabel(

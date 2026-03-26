@@ -60,6 +60,7 @@ struct FeatureErrorView: View {
             Button(retryTitle, action: retryAction)
                 .foregroundStyle(Color.duskAccent)
                 .duskSuppressTVOSButtonChrome()
+                .duskTVOSFocusEffectShape(Capsule())
         }
     }
 }

@@ -148,6 +148,7 @@ struct HomeHeroActionButtonLabel: View {
                 .font(.headline.weight(.semibold))
                 .lineLimit(1)
         }
+        #if !os(tvOS)
         .foregroundStyle(Color.white)
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
@@ -157,6 +158,7 @@ struct HomeHeroActionButtonLabel: View {
                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.16), radius: 10, y: 4)
+        #endif
     }
 }
 

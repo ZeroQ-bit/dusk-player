@@ -47,9 +47,10 @@ struct HomeTVView: View {
                                             systemImage: "play.fill"
                                         )
                                     }
-                                    .buttonStyle(.plain)
-                                    .duskSuppressTVOSButtonChrome()
-                                    .duskTVOSFocusEffectShape(Capsule())
+                                    #if os(tvOS)
+                                    .buttonStyle(.glassProminent)
+                                    .tint(Color.duskAccent)
+                                    #endif
                                     .contextMenu {
                                         HomeItemContextMenu(
                                             item: item,

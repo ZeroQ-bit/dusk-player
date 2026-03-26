@@ -333,19 +333,18 @@ private struct SeasonHeroActions: View {
                 guard let nextEpisode else { return }
                 onPlay(nextEpisode)
             } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "play.fill")
-                    Text(playButtonLabel)
-                }
-                .font(.headline)
+                DetailHeroPrimaryActionButtonLabel(
+                    title: playButtonLabel,
+                    systemImage: "play.fill"
+                )
                 .frame(maxWidth: usesFullWidthActionButtons ? .infinity : nil)
-                .padding(.vertical, 14)
-                .padding(.horizontal, usesFullWidthActionButtons ? 0 : 18)
-                .background(Color.duskAccent)
-                .foregroundStyle(.white)
-                .clipShape(Capsule())
             }
+            #if os(tvOS)
+            .buttonStyle(.glassProminent)
+            .tint(Color.duskAccent)
+            #else
             .duskSuppressTVOSButtonChrome()
+            #endif
             .contextMenu {
                 if let nextEpisode {
                     PlayVersionContextMenu(versions: nextEpisodePlayableVersions) { version in

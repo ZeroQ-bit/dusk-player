@@ -238,19 +238,18 @@ struct EpisodeDetailView: View {
             Button {
                 Task { await playback.play(ratingKey: details.ratingKey) }
             } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "play.fill")
-                    Text("Play Episode")
-                }
-                .font(.headline)
+                DetailHeroPrimaryActionButtonLabel(
+                    title: "Play Episode",
+                    systemImage: "play.fill"
+                )
                 .frame(maxWidth: usesFullWidthActionButtons ? .infinity : nil)
-                .padding(.vertical, 14)
-                .padding(.horizontal, usesFullWidthActionButtons ? 0 : 18)
-                .background(Color.duskAccent)
-                .foregroundStyle(.white)
-                .clipShape(Capsule())
             }
+            #if os(tvOS)
+            .buttonStyle(.glassProminent)
+            .tint(Color.duskAccent)
+            #else
             .duskSuppressTVOSButtonChrome()
+            #endif
             .contextMenu {
                 PlayVersionContextMenu(versions: details.media) { version in
                     Task { await playback.playVersion(ratingKey: details.ratingKey, mediaID: version.id) }
@@ -290,6 +289,7 @@ struct EpisodeDetailView: View {
                 )
             }
             .duskSuppressTVOSButtonChrome()
+            .duskTVOSFocusEffectShape(Capsule())
         }
     }
 

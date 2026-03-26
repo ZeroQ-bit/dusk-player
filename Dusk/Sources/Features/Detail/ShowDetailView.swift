@@ -205,19 +205,18 @@ struct ShowDetailView: View {
                 Task { await playback.play(ratingKey: ep.ratingKey) }
             }
         } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "play.fill")
-                Text(viewModel.playButtonLabel)
-            }
-            .font(.headline)
+            DetailHeroPrimaryActionButtonLabel(
+                title: viewModel.playButtonLabel,
+                systemImage: "play.fill"
+            )
             .frame(maxWidth: usesFullWidthActionButtons ? .infinity : nil)
-            .padding(.vertical, 14)
-            .padding(.horizontal, usesFullWidthActionButtons ? 0 : 18)
-            .background(Color.duskAccent)
-            .foregroundStyle(.white)
-            .clipShape(Capsule())
         }
+        #if os(tvOS)
+        .buttonStyle(.glassProminent)
+        .tint(Color.duskAccent)
+        #else
         .duskSuppressTVOSButtonChrome()
+        #endif
         .contextMenu {
             if let episode = viewModel.nextEpisode {
                 PlayVersionContextMenu(versions: viewModel.nextEpisodePlayableVersions) { version in

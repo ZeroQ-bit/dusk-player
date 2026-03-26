@@ -231,6 +231,29 @@ struct DetailHeroSecondaryActionButtonLabel: View {
     }
 }
 
+struct DetailHeroPrimaryActionButtonLabel: View {
+    let title: String
+    let systemImage: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.headline.weight(.semibold))
+
+            Text(title)
+                .font(.headline)
+                .lineLimit(1)
+        }
+        #if !os(tvOS)
+        .foregroundStyle(Color.white)
+        .padding(.vertical, 14)
+        .padding(.horizontal, 18)
+        .background(Color.duskAccent)
+        .clipShape(Capsule())
+        #endif
+    }
+}
+
 // MARK: - Actor Credit Card
 
 struct ActorCreditCard: View {

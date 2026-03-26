@@ -207,23 +207,18 @@ struct MovieDetailView: View {
             Button {
                 Task { await playback.play(ratingKey: details.ratingKey) }
             } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "play.fill")
-                    if let resume = viewModel.formattedResume {
-                        Text("Resume from \(resume)")
-                    } else {
-                        Text("Play")
-                    }
-                }
-                .font(.headline)
+                DetailHeroPrimaryActionButtonLabel(
+                    title: viewModel.formattedResume.map { "Resume from \($0)" } ?? "Play",
+                    systemImage: "play.fill"
+                )
                 .frame(maxWidth: usesFullWidthActionButtons ? .infinity : nil)
-                .padding(.vertical, 14)
-                .padding(.horizontal, usesFullWidthActionButtons ? 0 : 18)
-                .background(Color.duskAccent)
-                .foregroundStyle(.white)
-                .clipShape(Capsule())
             }
+            #if os(tvOS)
+            .buttonStyle(.glassProminent)
+            .tint(Color.duskAccent)
+            #else
             .duskSuppressTVOSButtonChrome()
+            #endif
             .contextMenu {
                 PlayVersionContextMenu(versions: details.media) { version in
                     Task { await playback.playVersion(ratingKey: details.ratingKey, mediaID: version.id) }
@@ -250,6 +245,7 @@ struct MovieDetailView: View {
                 )
             }
             .duskSuppressTVOSButtonChrome()
+            .duskTVOSFocusEffectShape(Capsule())
         }
     }
 

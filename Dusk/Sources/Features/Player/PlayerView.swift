@@ -383,6 +383,7 @@ private struct PlayerSessionView: View {
                 .padding(.vertical, 12)
                 .background(Color.duskAccent, in: Capsule())
                 .duskSuppressTVOSButtonChrome()
+                .duskTVOSFocusEffectShape(Capsule())
         }
         .padding(32)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28))

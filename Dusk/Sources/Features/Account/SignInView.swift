@@ -170,6 +170,7 @@ struct SignInView: View {
         }
         .disabled(isSigningIn)
         .duskSuppressTVOSButtonChrome()
+        .duskTVOSFocusEffectShape(RoundedRectangle(cornerRadius: 100, style: .continuous))
     }
 
     private var cancelButton: some View {
@@ -178,6 +179,7 @@ struct SignInView: View {
         }
         .foregroundStyle(Color.duskTextSecondary)
         .duskSuppressTVOSButtonChrome()
+        .duskTVOSFocusEffectShape(Capsule())
     }
 
     private func linkCodeContent(code: String, titleFont: Font, codeFont: Font) -> some View {
