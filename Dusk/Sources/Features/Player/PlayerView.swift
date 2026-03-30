@@ -120,9 +120,12 @@ private struct PlayerSessionView: View {
             #if os(tvOS)
             PlayerTVRemoteSeekBridge(
                 isEnabled: playback.upNextPresentation == nil && viewModel.playbackError == nil,
+                showsControls: viewModel.showControls,
+                hasActiveSkipMarker: viewModel.activeSkipMarker != nil,
                 backwardSeekInterval: PlayerOverlayLayout.remoteSeekInterval,
                 forwardSeekInterval: PlayerOverlayLayout.remoteSeekInterval,
-                onSeek: { offset in viewModel.handleSeekJump(by: offset) }
+                onSeek: { offset in viewModel.handleSeekJump(by: offset) },
+                onPrimaryActionWhenControlsHidden: { viewModel.togglePlayPause() }
             )
             .allowsHitTesting(false)
             .ignoresSafeArea()
@@ -181,16 +184,15 @@ private struct PlayerSessionView: View {
                         .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
 
-                if viewModel.playbackError == nil {
+                if viewModel.playbackError == nil,
+                   viewModel.showControls {
                     PlayerControlsOverlay(
                         viewModel: viewModel,
                         mediaDetails: mediaDetails,
                         hasActiveSkipMarker: viewModel.activeSkipMarker != nil,
                         onDismiss: dismissPlayer
                     )
-                    .opacity(viewModel.showControls ? 1 : 0)
-                    .allowsHitTesting(viewModel.showControls)
-                    .accessibilityHidden(!viewModel.showControls)
+                    .transition(.opacity)
                 }
             }
         }
@@ -332,6 +334,15 @@ private struct PlayerSessionView: View {
                         viewModel.skipActiveMarker()
                     }
                 } label: {
+                    #if os(tvOS)
+                    HStack(spacing: 8) {
+                        Image(systemName: marker.isCredits ? "forward.end.fill" : "chevron.forward.2")
+                            .font(.footnote.weight(.semibold))
+
+                        Text(marker.skipButtonTitle ?? "Skip")
+                            .font(.footnote.weight(.semibold))
+                    }
+                    #else
                     HStack(spacing: 10) {
                         Image(systemName: marker.isCredits ? "forward.end.fill" : "chevron.forward.2")
                             .font(.callout.weight(.semibold))
@@ -361,13 +372,29 @@ private struct PlayerSessionView: View {
                     }
                     .shadow(color: .black.opacity(0.28), radius: 18, y: 8)
                     .opacity(0.92)
+                    #endif
                 }
                 #if os(tvOS)
                 .focused($skipMarkerFocused)
-                #endif
+                .buttonStyle(.glass)
+                .controlSize(.small)
+                .tint(.white)
+                #else
                 .duskSuppressTVOSButtonChrome()
                 .duskTVOSFocusEffectShape(Capsule())
+                #endif
             }
+            #if os(tvOS)
+            if let progress = viewModel.autoSkipCountdownProgress {
+                ProgressView(value: progress)
+                    .progressViewStyle(.linear)
+                    .tint(.white.opacity(0.85))
+                    .frame(width: 180)
+                    .padding(.top, 10)
+                    .padding(.trailing, 4)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            #endif
         }
         .id(marker.id)
         #if os(tvOS)
@@ -418,9 +445,12 @@ private struct PlayerSessionView: View {
 #if os(tvOS)
 private struct PlayerTVRemoteSeekBridge: UIViewRepresentable {
     var isEnabled: Bool
+    var showsControls: Bool
+    var hasActiveSkipMarker: Bool
     var backwardSeekInterval: TimeInterval
     var forwardSeekInterval: TimeInterval
     var onSeek: (TimeInterval) -> Void
+    var onPrimaryActionWhenControlsHidden: () -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -448,9 +478,13 @@ private struct PlayerTVRemoteSeekBridge: UIViewRepresentable {
         func sync(_ view: PlayerTVRemoteSeekView, with parent: PlayerTVRemoteSeekBridge) {
             self.parent = parent
             view.isRemoteSeekEnabled = parent.isEnabled
+            view.showsControls = parent.showsControls
+            view.hasActiveSkipMarker = parent.hasActiveSkipMarker
             view.backwardSeekInterval = parent.backwardSeekInterval
             view.forwardSeekInterval = parent.forwardSeekInterval
             view.onSeek = parent.onSeek
+            view.onPrimaryActionWhenControlsHidden = parent.onPrimaryActionWhenControlsHidden
+            view.refreshFirstResponderStatus()
         }
     }
 }
@@ -462,9 +496,12 @@ private final class PlayerTVRemoteSeekView: UIView {
         }
     }
 
+    var showsControls = true
+    var hasActiveSkipMarker = false
     var backwardSeekInterval: TimeInterval = 0
     var forwardSeekInterval: TimeInterval = 0
     var onSeek: ((TimeInterval) -> Void)?
+    var onPrimaryActionWhenControlsHidden: (() -> Void)?
 
     override var canBecomeFirstResponder: Bool {
         isRemoteSeekEnabled && window != nil
@@ -491,10 +528,17 @@ private final class PlayerTVRemoteSeekView: UIView {
             return
         }
 
+        if presses.contains(where: { $0.type == .select }),
+           !showsControls,
+           !hasActiveSkipMarker {
+            onPrimaryActionWhenControlsHidden?()
+            return
+        }
+
         super.pressesBegan(presses, with: event)
     }
 
-    private func refreshFirstResponderStatus() {
+    func refreshFirstResponderStatus() {
         guard window != nil else { return }
 
         if isRemoteSeekEnabled {

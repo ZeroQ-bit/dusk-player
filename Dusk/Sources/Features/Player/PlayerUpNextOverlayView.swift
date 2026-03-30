@@ -130,31 +130,7 @@ struct PlayerUpNextOverlayView: View {
             }
             .padding(12)
 
-            Button(action: onPlayNow) {
-                ZStack {
-                    Circle()
-                        .fill(.ultraThinMaterial)
-                        .overlay {
-                            Circle()
-                                .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
-                        }
-                        .frame(width: metrics.playButtonSize, height: metrics.playButtonSize)
-
-                    if presentation.isStarting {
-                        ProgressView()
-                            .tint(.white)
-                    } else {
-                        Image(systemName: "play.fill")
-                            .font(.system(size: metrics.playIconSize, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .offset(x: 2)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-            }
-            .disabled(presentation.isStarting)
-            .duskSuppressTVOSButtonChrome()
-            .duskTVOSFocusEffectShape(Circle())
+            playNowButton(metrics: metrics)
         }
         .frame(width: metrics.previewWidth, height: metrics.previewHeight)
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
@@ -227,6 +203,48 @@ struct PlayerUpNextOverlayView: View {
             return "ARE YOU STILL WATCHING?"
         }
         return "UP NEXT"
+    }
+
+    @ViewBuilder
+    private func playNowButton(metrics: UpNextLayoutMetrics) -> some View {
+        #if os(tvOS)
+        Button(action: onPlayNow) {
+            playNowButtonContent(metrics: metrics)
+                .frame(width: metrics.playButtonSize, height: metrics.playButtonSize)
+        }
+        .disabled(presentation.isStarting)
+        .buttonStyle(.glassProminent)
+        .buttonBorderShape(.circle)
+        .tint(.white)
+        #else
+        Button(action: onPlayNow) {
+            ZStack {
+                Circle()
+                    .fill(.ultraThinMaterial)
+                    .overlay {
+                        Circle()
+                            .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
+                    }
+                    .frame(width: metrics.playButtonSize, height: metrics.playButtonSize)
+
+                playNowButtonContent(metrics: metrics)
+            }
+        }
+        .disabled(presentation.isStarting)
+        #endif
+    }
+
+    @ViewBuilder
+    private func playNowButtonContent(metrics: UpNextLayoutMetrics) -> some View {
+        if presentation.isStarting {
+            ProgressView()
+                .tint(.white)
+        } else {
+            Image(systemName: "play.fill")
+                .font(.system(size: metrics.playIconSize, weight: .semibold))
+                .foregroundStyle(.white)
+                .offset(x: 2)
+        }
     }
 
     private func countdownCard(label: String, progress: Double?) -> some View {
