@@ -48,6 +48,7 @@ final class AVPlayerEngine: PlaybackEngine {
     private var pendingStartPosition: TimeInterval?
     private var hasReportedPlaybackEnded = false
     private var currentAttemptContext: PlaybackAttemptContext?
+    @ObservationIgnored nonisolated(unsafe) private var loadValidationTask: Task<Void, Never>?
 
     // MARK: - Init
 
@@ -59,6 +60,7 @@ final class AVPlayerEngine: PlaybackEngine {
     }
 
     deinit {
+        loadValidationTask?.cancel()
         if let observer = timeObserver {
             player.removeTimeObserver(observer)
             timeObserver = nil
@@ -72,6 +74,7 @@ final class AVPlayerEngine: PlaybackEngine {
     // MARK: - Lifecycle
 
     func load(source: PlaybackSource) {
+        loadValidationTask?.cancel()
         removeTimeObserver()
         removePlaybackEndedObserver()
 
@@ -96,11 +99,23 @@ final class AVPlayerEngine: PlaybackEngine {
             "Playback attempt \(source.context.attemptLabel, privacy: .public) starting in AVPlayer for ratingKey \(source.context.ratingKey, privacy: .public), media \(source.context.mediaID, privacy: .public), part \(source.context.partID, privacy: .public), URL \(source.context.sanitizedDirectPlayURL, privacy: .public)"
         )
 
-        let item = AVPlayerItem(url: source.url)
-        item.textStyleRules = subtitleTextStyleRules
-        player.replaceCurrentItem(with: item)
-        observePlaybackEnd(for: item)
-        addTimeObserver()
+        let attemptID = source.context.attemptID
+        loadValidationTask = Task { [weak self] in
+            guard let self else { return }
+
+            if let validationError = await PlaybackError.validateDirectPlayURL(source.url) {
+                guard !Task.isCancelled else { return }
+                self.failLoad(
+                    validationError,
+                    attemptID: attemptID,
+                    message: "direct-play validation failed"
+                )
+                return
+            }
+
+            guard !Task.isCancelled else { return }
+            self.finishValidatedLoad(source: source, attemptID: attemptID)
+        }
     }
 
     func play() {
@@ -112,6 +127,8 @@ final class AVPlayerEngine: PlaybackEngine {
     }
 
     func stop() {
+        loadValidationTask?.cancel()
+        loadValidationTask = nil
         player.pause()
         removeTimeObserver()
         removePlaybackEndedObserver()
@@ -204,18 +221,47 @@ final class AVPlayerEngine: PlaybackEngine {
                 player.play()
             }
         case .failed:
-            let msg = itemError?.localizedDescription ?? "Unknown playback error"
+            let playbackError = PlaybackError.fromPlaybackFailure(
+                error: itemError,
+                fallback: "Playback failed while opening the direct-play stream."
+            )
             if let currentAttemptContext {
                 avPlayerEngineLogger.error(
-                    "Playback attempt \(currentAttemptContext.attemptLabel, privacy: .public) AVPlayer failed: \(msg, privacy: .public)"
+                    "Playback attempt \(currentAttemptContext.attemptLabel, privacy: .public) AVPlayer failed: \(playbackError.localizedDescription, privacy: .public)"
                 )
             }
-            error = .unknown(msg)
+            error = playbackError
             state = .error
             isBuffering = false
         default:
             break
         }
+    }
+
+    private func finishValidatedLoad(source: PlaybackSource, attemptID: UUID) {
+        guard currentAttemptContext?.attemptID == attemptID else { return }
+
+        let item = AVPlayerItem(url: source.url)
+        item.textStyleRules = subtitleTextStyleRules
+        player.replaceCurrentItem(with: item)
+        observePlaybackEnd(for: item)
+        addTimeObserver()
+        loadValidationTask = nil
+    }
+
+    private func failLoad(_ error: PlaybackError, attemptID: UUID, message: String) {
+        guard currentAttemptContext?.attemptID == attemptID else { return }
+
+        if let currentAttemptContext {
+            avPlayerEngineLogger.error(
+                "Playback attempt \(currentAttemptContext.attemptLabel, privacy: .public) AVPlayer \(message, privacy: .public): \(error.localizedDescription, privacy: .public)"
+            )
+        }
+
+        self.error = error
+        state = .error
+        isBuffering = false
+        loadValidationTask = nil
     }
 
     private func handleTimeControlStatus(_ status: AVPlayer.TimeControlStatus) {

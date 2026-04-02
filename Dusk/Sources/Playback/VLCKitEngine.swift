@@ -71,6 +71,8 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
     private var pendingSeekStartedAt: Date?
     private var currentAttemptContext: PlaybackAttemptContext?
     @ObservationIgnored nonisolated(unsafe) private var seekVerificationTask: Task<Void, Never>?
+    @ObservationIgnored nonisolated(unsafe) private var loadValidationTask: Task<Void, Never>?
+    @ObservationIgnored nonisolated(unsafe) private var videoRefreshTask: Task<Void, Never>?
 
     override init() {
         let player = VLCMediaPlayer()
@@ -86,13 +88,18 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
     }
 
     deinit {
+        loadValidationTask?.cancel()
         seekVerificationTask?.cancel()
+        videoRefreshTask?.cancel()
         mediaPlayer.stop()
         mediaPlayer.delegate = nil
         renderingHost.detach(from: mediaPlayer)
     }
 
     func load(source: PlaybackSource) {
+        loadValidationTask?.cancel()
+        videoRefreshTask?.cancel()
+        videoRefreshTask = nil
         currentAttemptContext = source.context
         state = .loading
         isBuffering = true
@@ -114,35 +121,49 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
             "Playback attempt \(source.context.attemptLabel, privacy: .public) starting in VLCKit for ratingKey \(source.context.ratingKey, privacy: .public), media \(source.context.mediaID, privacy: .public), part \(source.context.partID, privacy: .public), URL \(source.context.sanitizedDirectPlayURL, privacy: .public)"
         )
 
-        guard let media = VLCMedia(url: source.url) else {
-            isBuffering = false
-            state = .error
-            vlcKitEngineLogger.error(
-                "Playback attempt \(source.context.attemptLabel, privacy: .public) failed before opening: VLCKit could not create media for URL \(source.context.sanitizedDirectPlayURL, privacy: .public)"
-            )
-            error = .unknown("VLCKit could not open the direct-play stream.")
-            return
+        let attemptID = source.context.attemptID
+        loadValidationTask = Task { [weak self] in
+            guard let self else { return }
+
+            if let validationError = await PlaybackError.validateDirectPlayURL(source.url) {
+                guard !Task.isCancelled else { return }
+                self.failLoad(
+                    validationError,
+                    attemptID: attemptID,
+                    message: "VLCKit direct-play validation failed"
+                )
+                return
+            }
+
+            guard !Task.isCancelled else { return }
+            self.finishValidatedLoad(source: source, attemptID: attemptID)
         }
-        applySubtitleStyling(to: media)
-        mediaPlayer.media = media
-        mediaPlayer.currentSubTitleFontScale = PlaybackSubtitleStyle.vlcSubtitleFontScale
-        mediaPlayer.play()
     }
 
     func play() {
+        let wasPaused = state == .paused
         suppressPlaybackEndedEvent = false
         mediaPlayer.play()
+        if wasPaused {
+            scheduleVideoOutputRefreshAfterResume()
+        }
         syncRendererPlaybackState()
     }
 
     func pause() {
         seekVerificationTask?.cancel()
         seekVerificationTask = nil
+        videoRefreshTask?.cancel()
+        videoRefreshTask = nil
         mediaPlayer.pause()
         syncRendererPlaybackState()
     }
 
     func stop() {
+        loadValidationTask?.cancel()
+        loadValidationTask = nil
+        videoRefreshTask?.cancel()
+        videoRefreshTask = nil
         clearPendingSeek()
         suppressPlaybackEndedEvent = true
         mediaPlayer.stop()
@@ -250,11 +271,16 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
             let parsedStatus = String(describing: mediaPlayer.media?.parsedStatus)
             let attemptLabel = currentAttemptContext?.attemptLabel ?? "unknown"
             let urlLabel = currentAttemptContext?.sanitizedDirectPlayURL ?? "<unknown>"
+            let libraryError = VLCLibrary.currentErrorMessage
             vlcKitEngineLogger.error(
-                "Playback attempt \(attemptLabel, privacy: .public) VLCKit entered error state. parsedStatus=\(parsedStatus, privacy: .public) currentTime=\(self.currentTime, privacy: .public) duration=\(self.duration, privacy: .public) URL=\(urlLabel, privacy: .public)"
+                "Playback attempt \(attemptLabel, privacy: .public) VLCKit entered error state. parsedStatus=\(parsedStatus, privacy: .public) currentTime=\(self.currentTime, privacy: .public) duration=\(self.duration, privacy: .public) URL=\(urlLabel, privacy: .public) libraryError=\(libraryError ?? "<none>", privacy: .public)"
             )
-            error = .unknown(vlcPlaybackErrorMessage())
+            error = PlaybackError.fromDirectPlayFailureMessage(
+                libraryError ?? vlcPlaybackErrorMessage(),
+                fallback: vlcPlaybackErrorMessage()
+            )
             clearPendingSeek()
+            loadValidationTask = nil
 
         @unknown default:
             break
@@ -382,10 +408,71 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
     }
 
     private func vlcPlaybackErrorMessage() -> String {
-        guard let currentAttemptContext else {
-            return "VLCKit failed while opening the direct-play stream."
+        "Playback failed while opening the direct-play stream."
+    }
+
+    private func scheduleVideoOutputRefreshAfterResume() {
+        #if os(iOS)
+        videoRefreshTask?.cancel()
+        videoRefreshTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: .milliseconds(150))
+            } catch {
+                return
+            }
+
+            guard let self, self.state == .playing || self.mediaPlayer.isPlaying else { return }
+            self.refreshVideoOutputAfterResume()
         }
-        return "VLCKit failed while opening the direct-play stream. \(currentAttemptContext.sanitizedDirectPlayURL)"
+        #endif
+    }
+
+    private func refreshVideoOutputAfterResume() {
+        #if os(iOS)
+        // Re-selecting the active video track nudges VLCKit to rebuild the
+        // video output when audio has resumed but rendering is still stale.
+        guard let selectedTrack = mediaPlayer.videoTracks.first(where: \.isSelected)
+            ?? mediaPlayer.videoTracks.first else {
+            return
+        }
+
+        selectedTrack.isSelectedExclusively = true
+        renderingHost.invalidatePlaybackState()
+        #endif
+    }
+
+    private func finishValidatedLoad(source: PlaybackSource, attemptID: UUID) {
+        guard currentAttemptContext?.attemptID == attemptID else { return }
+
+        guard let media = VLCMedia(url: source.url) else {
+            failLoad(
+                .unknown("Playback failed while opening the direct-play stream."),
+                attemptID: attemptID,
+                message: "VLCKit could not create media"
+            )
+            return
+        }
+
+        applySubtitleStyling(to: media)
+        mediaPlayer.media = media
+        mediaPlayer.currentSubTitleFontScale = PlaybackSubtitleStyle.vlcSubtitleFontScale
+        mediaPlayer.play()
+        loadValidationTask = nil
+    }
+
+    private func failLoad(_ error: PlaybackError, attemptID: UUID, message: String) {
+        guard currentAttemptContext?.attemptID == attemptID else { return }
+
+        if let currentAttemptContext {
+            vlcKitEngineLogger.error(
+                "Playback attempt \(currentAttemptContext.attemptLabel, privacy: .public) \(message, privacy: .public): \(error.localizedDescription, privacy: .public)"
+            )
+        }
+
+        self.error = error
+        state = .error
+        isBuffering = false
+        loadValidationTask = nil
     }
 
     private func logStateChange(_ vlcState: VLCMediaPlayerState) {

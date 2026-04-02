@@ -5,6 +5,7 @@ import VLCKit
 final class IOSVLCKitRenderingHost: NSObject, VLCKitRenderingHost, @unchecked Sendable, VLCDrawable, VLCPictureInPictureDrawable, VLCPictureInPictureMediaControlling {
     let playerView: UIView
 
+    private weak var mediaPlayer: VLCMediaPlayer?
     private var pictureInPictureController: (any VLCPictureInPictureWindowControlling)?
     private var hostedVideoView: UIView?
     private var currentTimeMs: Int64 = 0
@@ -32,6 +33,7 @@ final class IOSVLCKitRenderingHost: NSObject, VLCKitRenderingHost, @unchecked Se
     }
 
     func attach(to player: VLCMediaPlayer, engine: VLCKitEngine) {
+        mediaPlayer = player
         playHandler = { [weak engine] in
             Task { @MainActor [weak engine] in
                 engine?.play()
@@ -61,6 +63,7 @@ final class IOSVLCKitRenderingHost: NSObject, VLCKitRenderingHost, @unchecked Se
     }
 
     func detach(from player: VLCMediaPlayer) {
+        mediaPlayer = nil
         player.drawable = nil
         playHandler = nil
         pauseHandler = nil
@@ -134,19 +137,25 @@ final class IOSVLCKitRenderingHost: NSObject, VLCKitRenderingHost, @unchecked Se
     }
 
     func mediaLength() -> Int64 {
-        durationMs
+        if let media = mediaPlayer?.media {
+            return Int64(media.length.intValue)
+        }
+        return durationMs
     }
 
     func mediaTime() -> Int64 {
-        currentTimeMs
+        if let mediaPlayer {
+            return Int64(mediaPlayer.time.intValue)
+        }
+        return currentTimeMs
     }
 
     func isMediaSeekable() -> Bool {
-        mediaSeekable
+        mediaPlayer?.isSeekable ?? mediaSeekable
     }
 
     func isMediaPlaying() -> Bool {
-        mediaPlaying
+        mediaPlayer?.isPlaying ?? mediaPlaying
     }
 
     private func observeApplicationLifecycle() {
@@ -180,7 +189,7 @@ final class IOSVLCKitRenderingHost: NSObject, VLCKitRenderingHost, @unchecked Se
         MainActor.assumeIsolated {
             pictureInPictureController != nil &&
             !isPictureInPictureActive &&
-            mediaPlaying &&
+            isMediaPlaying() &&
             playerView.window != nil &&
             !playerView.bounds.isEmpty
         }

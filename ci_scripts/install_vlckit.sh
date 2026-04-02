@@ -2,15 +2,40 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BUILD_DIR="${ROOT_DIR}/.build"
 IOS_FRAMEWORK_DIR="${ROOT_DIR}/Frameworks/VLCKit.xcframework"
 TVOS_FRAMEWORK_DIR="${ROOT_DIR}/Frameworks/VLCKit-tvOS.xcframework"
 LICENSE_PATH="${ROOT_DIR}/Frameworks/VLCKit-LICENSE.txt"
-SOURCE_DIR="${ROOT_DIR}/.build/vlckit-src"
+SOURCE_DIR="${BUILD_DIR}/vlckit-src"
 VLCKIT_REPO_URL="https://code.videolan.org/videolan/VLCKit.git"
 VLCKIT_REF="4.0.0a18"
+TEMP_FILES=()
 
 # Manual maintenance script for refreshing the vendored VLCKit binary.
 # CI consumes the checked-in xcframework and should not run this script.
+
+cleanup() {
+    local exit_code=$?
+
+    for temp_file in "${TEMP_FILES[@]:-}"; do
+        [ -n "${temp_file}" ] && rm -f "${temp_file}"
+    done
+
+    rm -rf "${SOURCE_DIR}"
+    rmdir "${BUILD_DIR}" >/dev/null 2>&1 || true
+
+    exit "${exit_code}"
+}
+
+trap cleanup EXIT
+
+make_temp_file() {
+    local temp_file
+
+    temp_file="$(mktemp -t dusk-vlckit.XXXXXX)"
+    TEMP_FILES+=("${temp_file}")
+    printf '%s\n' "${temp_file}"
+}
 
 has_expected_vlckit() {
     [ -d "${IOS_FRAMEWORK_DIR}" ] &&
@@ -42,7 +67,7 @@ thin_ios_simulator_slice() {
 
     mv "${simulator_dir}" "${thin_simulator_dir}"
 
-    thin_binary="$(mktemp "${ROOT_DIR}/.build/vlckit-simulator-XXXXXX")"
+    thin_binary="$(make_temp_file)"
     xcrun lipo "${simulator_binary}" -thin arm64 -output "${thin_binary}"
     mv "${thin_binary}" "${simulator_binary}"
     chmod 755 "${simulator_binary}"
@@ -64,7 +89,7 @@ thin_tvos_simulator_slice() {
 
     mv "${simulator_dir}" "${thin_simulator_dir}"
 
-    thin_binary="$(mktemp "${ROOT_DIR}/.build/vlckit-tvos-simulator-XXXXXX")"
+    thin_binary="$(make_temp_file)"
     xcrun lipo "${simulator_binary}" -thin arm64 -output "${thin_binary}"
     mv "${thin_binary}" "${simulator_binary}"
     chmod 755 "${simulator_binary}"
@@ -93,7 +118,7 @@ fi
 echo "Building VLCKit ${VLCKIT_REF} for iOS and tvOS from source..."
 
 rm -rf "${IOS_FRAMEWORK_DIR}" "${TVOS_FRAMEWORK_DIR}" "${SOURCE_DIR}"
-mkdir -p "${ROOT_DIR}/Frameworks" "${ROOT_DIR}/.build"
+mkdir -p "${ROOT_DIR}/Frameworks" "${BUILD_DIR}"
 
 git clone --depth 1 --branch "${VLCKIT_REF}" "${VLCKIT_REPO_URL}" "${SOURCE_DIR}"
 
