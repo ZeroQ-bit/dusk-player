@@ -363,6 +363,7 @@ struct ActorCreditCard: View {
     @ViewBuilder
     private func avatarImage(size: CGFloat) -> some View {
         let imageSize = Int(size.rounded())
+        let artworkShape = RoundedRectangle(cornerRadius: PosterArtwork.cornerRadius, style: .continuous)
 
         Group {
             if let thumbPath = person.thumb {
@@ -381,13 +382,8 @@ struct ActorCreditCard: View {
             }
         }
         .frame(width: size, height: size)
-        #if os(tvOS)
-        .clipShape(RoundedRectangle(cornerRadius: PosterArtwork.cornerRadius, style: .continuous))
-        .contentShape(RoundedRectangle(cornerRadius: PosterArtwork.cornerRadius, style: .continuous))
-        #else
-        .clipShape(Circle())
-        .contentShape(Circle())
-        #endif
+        .clipShape(artworkShape)
+        .contentShape(artworkShape)
     }
 
     private func placeholder(size: CGFloat) -> some View {

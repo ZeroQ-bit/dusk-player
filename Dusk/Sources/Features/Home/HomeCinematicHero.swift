@@ -18,6 +18,7 @@ struct HomeCinematicHeroLayout {
     var titleFontSize: CGFloat = 42
     var titleLogoMaxWidth: CGFloat = 420
     var titleLogoMaxHeight: CGFloat = 108
+    var backdropImageAlignment: Alignment = .center
     var episodeTitleFont: Font = .title3.weight(.semibold)
     var metadataFont: Font = .subheadline.weight(.medium)
     var summaryFont: Font = .body
@@ -39,6 +40,7 @@ struct HomeCinematicHeroLayout {
         titleFontSize: 46,
         titleLogoMaxWidth: 560,
         titleLogoMaxHeight: 128,
+        backdropImageAlignment: .top,
         episodeTitleFont: .title2.weight(.semibold),
         metadataFont: .headline.weight(.medium),
         summaryFont: .body,
@@ -718,6 +720,8 @@ struct HomeCinematicHero: View {
         height: Int,
         heroHeight: CGFloat
     ) -> some View {
+        let imageAlignment = heroBackdropImageAlignment
+
         #if canImport(UIKit)
         if let image = preloadedHeroBackdropImages[item.ratingKey] {
             GeometryReader { geometry in
@@ -727,15 +731,19 @@ struct HomeCinematicHero: View {
                     Image(uiImage: image)
                         .resizable()
                         .scaledToFill()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: imageAlignment)
                         .frame(
                             width: geometry.size.width,
                             height: geometry.size.height,
-                            alignment: .center
+                            alignment: imageAlignment
                         )
                         .clipped()
                 }
-                .frame(width: geometry.size.width, height: geometry.size.height, alignment: .center)
+                .frame(
+                    width: geometry.size.width,
+                    height: geometry.size.height,
+                    alignment: imageAlignment
+                )
                 .clipped()
             }
             .frame(height: heroHeight)
@@ -747,7 +755,8 @@ struct HomeCinematicHero: View {
                     width: width,
                     height: height
                 ),
-                height: heroHeight
+                height: heroHeight,
+                imageAlignment: imageAlignment
             )
         }
         #else
@@ -757,9 +766,14 @@ struct HomeCinematicHero: View {
                 width: width,
                 height: height
             ),
-            height: heroHeight
+            height: heroHeight,
+            imageAlignment: imageAlignment
         )
         #endif
+    }
+
+    private var heroBackdropImageAlignment: Alignment {
+        layout.backdropImageAlignment
     }
 
     private func moveHero(to index: Int, direction: HeroTransitionDirection, duration: TimeInterval) {

@@ -1,7 +1,9 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 #if os(iOS)
 import SafariServices
-import UIKit
 #endif
 
 extension View {
@@ -342,6 +344,7 @@ enum DuskPosterMetrics {
 struct DetailHeroBackdrop: View {
     let imageURL: URL?
     let height: CGFloat
+    var imageAlignment: Alignment = .center
 
     var body: some View {
         GeometryReader { geometry in
@@ -355,11 +358,11 @@ struct DetailHeroBackdrop: View {
                             image
                                 .resizable()
                                 .scaledToFill()
-                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: imageAlignment)
                                 .frame(
                                     width: geometry.size.width,
                                     height: geometry.size.height,
-                                    alignment: .center
+                                    alignment: imageAlignment
                                 )
                                 .clipped()
                         default:
@@ -368,7 +371,11 @@ struct DetailHeroBackdrop: View {
                     }
                 }
             }
-            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .center)
+            .frame(
+                width: geometry.size.width,
+                height: geometry.size.height,
+                alignment: imageAlignment
+            )
             .clipped()
         }
         .frame(height: height)
