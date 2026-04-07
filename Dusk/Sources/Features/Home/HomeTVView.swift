@@ -4,7 +4,8 @@ import UIKit
 #endif
 
 struct HomeTVView: View {
-    @FocusState private var isHeroPlayButtonFocused: Bool
+    @FocusState private var focusedTarget: FocusTarget?
+    @State private var heroPrimaryFocusView: UIView?
 
     @Binding var path: NavigationPath
 
@@ -13,9 +14,14 @@ struct HomeTVView: View {
     let recentlyAddedInlineItemLimit: Int
     let play: (PlexItem) -> Void
 
+    private enum FocusTarget: Hashable {
+        case heroPrimaryAction
+    }
+
     var body: some View {
         GeometryReader { geometry in
             let heroItems = viewModel.heroItems()
+            let heroItemIDs = heroItems.map(\.id)
             let globalFrame = geometry.frame(in: .global)
             let screenWidth = max(fullDisplayWidth(fallback: geometry.size.width), geometry.size.width)
             let leadingContentInset = max(globalFrame.minX, 0)
@@ -52,10 +58,13 @@ struct HomeTVView: View {
                                     #if os(tvOS)
                                     .buttonStyle(.glassProminent)
                                     .tint(Color.duskAccent)
-                                    .focused($isHeroPlayButtonFocused)
+                                    .focused($focusedTarget, equals: .heroPrimaryAction)
                                     .background(
                                         TVRemoteSwipeCapture(
-                                            isEnabled: isHeroPlayButtonFocused,
+                                            isEnabled: focusedTarget == .heroPrimaryAction,
+                                            onResolvedFocusView: { view in
+                                                heroPrimaryFocusView = view
+                                            },
                                             onSwipeLeft: callbacks.showPrevious,
                                             onSwipeRight: callbacks.showNext
                                         )
@@ -89,6 +98,9 @@ struct HomeTVView: View {
                         .frame(width: heroContainerSize.width)
                         .offset(x: -leadingContentInset)
                         .ignoresSafeArea(edges: .top)
+                        #if os(tvOS)
+                        .focusSection()
+                        #endif
                     } else if let serverName {
                         homeHeader(serverName: serverName)
                             .padding(.horizontal, DuskPosterMetrics.carouselHorizontalPadding)
@@ -149,6 +161,9 @@ struct HomeTVView: View {
                     }
                     .padding(.top, heroItems.isEmpty ? 56 : 44)
                     .padding(.bottom, DuskPosterMetrics.pageBottomPadding)
+                    #if os(tvOS)
+                    .focusSection()
+                    #endif
                 }
                 .frame(width: geometry.size.width, alignment: .leading)
                 .padding(.top, heroItems.isEmpty ? 24 : -geometry.safeAreaInsets.top)
@@ -160,7 +175,25 @@ struct HomeTVView: View {
             #if os(tvOS)
             .scrollClipDisabled()
             #endif
+            .background(
+                TVHomeTopFocusGuide(targetView: heroPrimaryFocusView)
+            )
+            .defaultFocus($focusedTarget, .heroPrimaryAction)
+            .task(id: heroItemIDs) {
+                await requestHeroPrimaryFocusIfNeeded(hasHeroItems: !heroItems.isEmpty)
+            }
         }
+    }
+
+    @MainActor
+    private func requestHeroPrimaryFocusIfNeeded(hasHeroItems: Bool) async {
+        guard hasHeroItems else { return }
+
+        // tvOS initially lands on the tab bar; yielding once lets the home content
+        // enter the hierarchy before we redirect focus to the hero action.
+        focusedTarget = nil
+        await Task.yield()
+        focusedTarget = .heroPrimaryAction
     }
 
     private func fullDisplayWidth(fallback: CGFloat) -> CGFloat {
@@ -208,6 +241,7 @@ struct HomeTVView: View {
 #if os(tvOS)
 private struct TVRemoteSwipeCapture: UIViewRepresentable {
     let isEnabled: Bool
+    let onResolvedFocusView: (UIView?) -> Void
     let onSwipeLeft: () -> Void
     let onSwipeRight: () -> Void
 
@@ -216,6 +250,7 @@ private struct TVRemoteSwipeCapture: UIViewRepresentable {
         view.backgroundColor = .clear
         view.update(
             isEnabled: isEnabled,
+            onResolvedFocusView: onResolvedFocusView,
             onSwipeLeft: onSwipeLeft,
             onSwipeRight: onSwipeRight
         )
@@ -225,6 +260,7 @@ private struct TVRemoteSwipeCapture: UIViewRepresentable {
     func updateUIView(_ uiView: SwipeCaptureView, context: Context) {
         uiView.update(
             isEnabled: isEnabled,
+            onResolvedFocusView: onResolvedFocusView,
             onSwipeLeft: onSwipeLeft,
             onSwipeRight: onSwipeRight
         )
@@ -247,6 +283,7 @@ private final class SwipeCaptureView: UIView, UIGestureRecognizerDelegate {
     }()
 
     private var isSwipeCaptureEnabled = false
+    private var onResolvedFocusView: (UIView?) -> Void = { _ in }
     private var onSwipeLeft: () -> Void = {}
     private var onSwipeRight: () -> Void = {}
 
@@ -270,10 +307,12 @@ private final class SwipeCaptureView: UIView, UIGestureRecognizerDelegate {
 
     func update(
         isEnabled: Bool,
+        onResolvedFocusView: @escaping (UIView?) -> Void,
         onSwipeLeft: @escaping () -> Void,
         onSwipeRight: @escaping () -> Void
     ) {
         isSwipeCaptureEnabled = isEnabled
+        self.onResolvedFocusView = onResolvedFocusView
         self.onSwipeLeft = onSwipeLeft
         self.onSwipeRight = onSwipeRight
         attachRecognizersIfNeeded()
@@ -308,12 +347,108 @@ private final class SwipeCaptureView: UIView, UIGestureRecognizerDelegate {
         targetView.addGestureRecognizer(swipeLeftRecognizer)
         targetView.addGestureRecognizer(swipeRightRecognizer)
         attachedView = targetView
+        onResolvedFocusView(targetView)
     }
 
     private func detachRecognizers() {
         attachedView?.removeGestureRecognizer(swipeLeftRecognizer)
         attachedView?.removeGestureRecognizer(swipeRightRecognizer)
         attachedView = nil
+        onResolvedFocusView(nil)
+    }
+}
+
+private struct TVHomeTopFocusGuide: UIViewRepresentable {
+    let targetView: UIView?
+
+    func makeUIView(context: Context) -> HomeTopFocusGuideView {
+        let view = HomeTopFocusGuideView()
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .clear
+        view.updateTargetView(targetView)
+        return view
+    }
+
+    func updateUIView(_ uiView: HomeTopFocusGuideView, context: Context) {
+        uiView.updateTargetView(targetView)
+    }
+}
+
+private final class HomeTopFocusGuideView: UIView {
+    private weak var guideContainerView: UIView?
+    private weak var targetView: UIView?
+    private let focusGuide = UIFocusGuide()
+    private var focusGuideConstraints: [NSLayoutConstraint] = []
+
+    override func didMoveToSuperview() {
+        super.didMoveToSuperview()
+        installFocusGuideIfNeeded()
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        installFocusGuideIfNeeded()
+    }
+
+    override func willMove(toSuperview newSuperview: UIView?) {
+        if newSuperview == nil {
+            uninstallFocusGuide()
+        }
+
+        super.willMove(toSuperview: newSuperview)
+    }
+
+    override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
+        super.didUpdateFocus(in: context, with: coordinator)
+        updateGuideEnabled(for: context.nextFocusedView)
+    }
+
+    func updateTargetView(_ targetView: UIView?) {
+        self.targetView = targetView
+        installFocusGuideIfNeeded()
+        focusGuide.preferredFocusEnvironments = targetView.map { [$0] } ?? []
+        focusGuide.isEnabled = targetView != nil
+    }
+
+    private func installFocusGuideIfNeeded() {
+        guard let containerView = superview else { return }
+
+        if guideContainerView !== containerView {
+            uninstallFocusGuide()
+
+            containerView.addLayoutGuide(focusGuide)
+            focusGuideConstraints = [
+                focusGuide.topAnchor.constraint(equalTo: containerView.topAnchor),
+                focusGuide.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
+                focusGuide.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
+                focusGuide.heightAnchor.constraint(equalToConstant: 220)
+            ]
+            NSLayoutConstraint.activate(focusGuideConstraints)
+            guideContainerView = containerView
+        }
+
+        focusGuide.preferredFocusEnvironments = targetView.map { [$0] } ?? []
+    }
+
+    private func uninstallFocusGuide() {
+        NSLayoutConstraint.deactivate(focusGuideConstraints)
+        focusGuideConstraints.removeAll()
+
+        if let guideContainerView {
+            guideContainerView.removeLayoutGuide(focusGuide)
+        }
+
+        guideContainerView = nil
+    }
+
+    private func updateGuideEnabled(for nextFocusedView: UIView?) {
+        guard let guideContainerView else {
+            focusGuide.isEnabled = targetView != nil
+            return
+        }
+
+        let nextIsInsideHome = nextFocusedView?.isDescendant(of: guideContainerView) ?? false
+        focusGuide.isEnabled = targetView != nil && !nextIsInsideHome
     }
 }
 #endif
