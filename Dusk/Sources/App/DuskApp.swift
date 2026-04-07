@@ -65,6 +65,9 @@ private extension DuskApp {
 
         do {
             try audioSession.setCategory(.playback, mode: .moviePlayback, policy: .longFormVideo)
+            if #available(iOS 15.0, *) {
+                try audioSession.setSupportsMultichannelContent(true)
+            }
         } catch {
             assertionFailure("Failed to configure playback audio session: \(error.localizedDescription)")
         }

@@ -3,6 +3,9 @@ import OSLog
 import SwiftUI
 import UIKit
 import VLCKit
+#if os(iOS)
+import AVFoundation
+#endif
 #endif
 
 #if canImport(VLCKit)
@@ -70,6 +73,7 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
     private var pendingSeekTarget: TimeInterval?
     private var pendingSeekStartedAt: Date?
     private var currentAttemptContext: PlaybackAttemptContext?
+    @ObservationIgnored nonisolated(unsafe) private var audioSessionObservers: [NSObjectProtocol] = []
     @ObservationIgnored nonisolated(unsafe) private var seekVerificationTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var loadValidationTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var videoRefreshTask: Task<Void, Never>?
@@ -85,9 +89,14 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
         player.timeChangeUpdateInterval = 0.25
         player.minimalTimePeriod = 250_000
         renderingHost.attach(to: player, engine: self)
+        configureAudioOutputPolicy()
+        registerAudioSessionObserversIfNeeded()
     }
 
     deinit {
+        for observer in audioSessionObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
         loadValidationTask?.cancel()
         seekVerificationTask?.cancel()
         videoRefreshTask?.cancel()
@@ -230,6 +239,7 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
             isBuffering = false
             state = .playing
             suppressPlaybackEndedEvent = false
+            configureAudioOutputPolicy(reason: "entered-playing-state")
 
             if !hasAppliedStartPosition, let start = pendingStartPosition, start > 0 {
                 hasAppliedStartPosition = true
@@ -454,6 +464,7 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
         }
 
         applySubtitleStyling(to: media)
+        configureAudioOutputPolicy(reason: "before-play")
         mediaPlayer.media = media
         mediaPlayer.currentSubTitleFontScale = PlaybackSubtitleStyle.vlcSubtitleFontScale
         mediaPlayer.play()
@@ -532,6 +543,100 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
     private func normalizedLanguageCode(from language: String?) -> String? {
         guard let language, !language.isEmpty else { return nil }
         return language.lowercased()
+    }
+
+    private func configureAudioOutputPolicy(reason: String = "initial") {
+        #if os(iOS)
+        let session = AVAudioSession.sharedInstance()
+        let route = session.currentRoute
+        let outputs = route.outputs
+        let outputChannelCount = max(
+            Int(session.outputNumberOfChannels),
+            outputs.compactMap { $0.channels?.count }.max() ?? 0
+        )
+        let maximumOutputChannelCount = max(Int(session.maximumOutputNumberOfChannels), outputChannelCount)
+
+        let routeSupportsSpatialAudio: Bool
+        if #available(iOS 15.0, *) {
+            routeSupportsSpatialAudio = outputs.contains { $0.isSpatialAudioEnabled }
+            do {
+                try session.setSupportsMultichannelContent(true)
+            } catch {
+                vlcKitEngineLogger.debug(
+                    "Failed to opt in to multichannel audio session content support: \(error.localizedDescription, privacy: .public)"
+                )
+            }
+        } else {
+            routeSupportsSpatialAudio = false
+        }
+
+        let routeSupportsMultichannelLayout: Bool
+        if #available(iOS 17.2, *) {
+            routeSupportsMultichannelLayout =
+                maximumOutputChannelCount > 2 ||
+                !session.supportedOutputChannelLayouts.isEmpty
+        } else {
+            routeSupportsMultichannelLayout = maximumOutputChannelCount > 2
+        }
+
+        let targetMixMode: VLCMediaPlayer.AudioMixMode
+        if routeSupportsMultichannelLayout {
+            targetMixMode = .modeUnset
+        } else if routeSupportsSpatialAudio {
+            targetMixMode = .modeBinaural
+        } else {
+            targetMixMode = .modeStereo
+        }
+
+        mediaPlayer.audio?.passthrough = false
+        if mediaPlayer.audioMixMode != targetMixMode {
+            mediaPlayer.audioMixMode = targetMixMode
+        }
+
+        let routeSummary = outputs.map { output in
+            let channelCount = output.channels?.count ?? 0
+            if #available(iOS 15.0, *) {
+                return "\(output.portType.rawValue){channels=\(channelCount), spatial=\(output.isSpatialAudioEnabled)}"
+            } else {
+                return "\(output.portType.rawValue){channels=\(channelCount)}"
+            }
+        }.joined(separator: ", ")
+
+        vlcKitEngineLogger.notice(
+            "Applied VLC audio policy reason=\(reason, privacy: .public) mixMode=\(String(describing: targetMixMode), privacy: .public) passthrough=false outputChannels=\(outputChannelCount, privacy: .public) maxOutputChannels=\(maximumOutputChannelCount, privacy: .public) route=[\(routeSummary, privacy: .public)]"
+        )
+        #endif
+    }
+
+    private func registerAudioSessionObserversIfNeeded() {
+        #if os(iOS)
+        let notifications: [Notification.Name] = {
+            var names: [Notification.Name] = [
+                AVAudioSession.routeChangeNotification,
+            ]
+            if #available(iOS 15.0, *) {
+                names.append(AVAudioSession.spatialPlaybackCapabilitiesChangedNotification)
+            }
+            if #available(iOS 17.2, *) {
+                names.append(AVAudioSession.renderingCapabilitiesChangeNotification)
+                names.append(AVAudioSession.renderingModeChangeNotification)
+            }
+            return names
+        }()
+
+        for name in notifications {
+            let observer = NotificationCenter.default.addObserver(
+                forName: name,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.configureAudioOutputPolicy(reason: name.rawValue)
+                }
+            }
+            audioSessionObservers.append(observer)
+        }
+        #endif
     }
 }
 
