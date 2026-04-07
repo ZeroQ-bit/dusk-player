@@ -82,13 +82,17 @@ struct HomeCinematicHero: View {
     @State private var heroSlideProgress: CGFloat = 1
     @State private var heroSlideRevision = 0
     @State private var heroTransitionDirection: HeroTransitionDirection = .forward
+    @State private var heroDragOffset: CGFloat = 0
+    @State private var heroDragTargetIndex: Int?
+    @State private var heroDragRevision = 0
+    @State private var isHeroDragging = false
     #if canImport(UIKit)
     @State private var preloadedHeroBackdropImages: [String: UIImage] = [:]
     @State private var preloadedHeroTitleImages: [String: UIImage] = [:]
     @State private var failedHeroTitleImageKeys: Set<String> = []
     #endif
 
-    private let heroRotationInterval: UInt64 = 6_000_000_000
+    private let heroRotationInterval: UInt64 = 7_000_000_000
 
     var body: some View {
         let resolvedIndex = resolvedHeroIndex
@@ -109,18 +113,18 @@ struct HomeCinematicHero: View {
 
         let baseHero = ZStack(alignment: .bottomLeading) {
             ZStack(alignment: .bottomLeading) {
-                if let transitioningHeroIndex,
-                   items.indices.contains(transitioningHeroIndex) {
+                if let backgroundHeroIndex,
+                   items.indices.contains(backgroundHeroIndex) {
                     heroSlide(
-                        item: items[transitioningHeroIndex],
+                        item: items[backgroundHeroIndex],
                         heroHeight: heroHeight,
                         backdropWidth: backdropWidth,
                         backdropHeight: backdropHeight,
                         contentWidth: contentWidth,
                         reservesPagerSpace: items.count > 1
                     )
-                    .offset(x: heroSlideOffset(for: .outgoing, width: heroWidth))
-                    .id("outgoing-\(items[transitioningHeroIndex].ratingKey)")
+                    .offset(x: backgroundHeroOffset(width: heroWidth))
+                    .id("background-\(items[backgroundHeroIndex].ratingKey)")
                     .zIndex(0)
                 }
 
@@ -133,8 +137,8 @@ struct HomeCinematicHero: View {
                         contentWidth: contentWidth,
                         reservesPagerSpace: items.count > 1
                     )
-                    .offset(x: heroSlideOffset(for: .incoming, width: heroWidth))
-                    .id("incoming-\(items[resolvedIndex].ratingKey)")
+                    .offset(x: foregroundHeroOffset(width: heroWidth))
+                    .id("foreground-\(items[resolvedIndex].ratingKey)")
                     .zIndex(1)
                 }
             }
@@ -156,6 +160,7 @@ struct HomeCinematicHero: View {
         .onChange(of: heroItemIDs) { _, ids in
             guard !ids.isEmpty else {
                 resetHeroSlideState()
+                resetHeroDragState()
                 currentHeroIndex = 0
                 return
             }
@@ -165,6 +170,7 @@ struct HomeCinematicHero: View {
             }
 
             resetHeroSlideState()
+            resetHeroDragState()
             restartHeroRotation()
         }
         .task(id: heroRotationSeed) {
@@ -185,8 +191,11 @@ struct HomeCinematicHero: View {
             return AnyView(
                 baseHero.simultaneousGesture(
                     DragGesture(minimumDistance: 20)
+                        .onChanged { value in
+                            handleHeroDragChanged(value)
+                        }
                         .onEnded { value in
-                            handleHeroDrag(value.translation)
+                            handleHeroDragEnded(value, heroWidth: heroWidth)
                         }
                 )
             )
@@ -226,7 +235,24 @@ struct HomeCinematicHero: View {
             String(scenePhase == .active),
             String(isHeroRotationPaused),
             String(autoRotates),
+            String(isHeroDragging),
         ].joined(separator: "::")
+    }
+
+    private var backgroundHeroIndex: Int? {
+        if isHeroDragActive {
+            return heroDragTargetIndex
+        }
+
+        return transitioningHeroIndex
+    }
+
+    private var isHeroDragActive: Bool {
+        isHeroDragging || heroDragTargetIndex != nil || heroDragOffset != 0
+    }
+
+    private var isHeroDragSettling: Bool {
+        heroDragTargetIndex != nil && !isHeroDragging
     }
 
     private func heroSlide(
@@ -466,7 +492,7 @@ struct HomeCinematicHero: View {
             moveHero(
                 to: (currentHeroIndex + 1) % heroItemIDs.count,
                 direction: .forward,
-                duration: 0.6
+                duration: 0.42
             )
             restartHeroRotation()
         }
@@ -505,29 +531,45 @@ struct HomeCinematicHero: View {
         heroRotationRevision += 1
     }
 
-    private func handleHeroDrag(_ translation: CGSize) {
+    private func handleHeroDragChanged(_ value: DragGesture.Value) {
         guard supportsDragNavigation,
               heroItemIDs.count > 1,
-              abs(translation.width) > abs(translation.height),
-              abs(translation.width) > 44 else {
+              transitioningHeroIndex == nil,
+              !isHeroDragSettling else {
             return
         }
 
-        restartHeroRotation()
-
-        let heroCount = heroItemIDs.count
-        let nextIndex: Int
-        if translation.width < 0 {
-            nextIndex = (currentHeroIndex + 1) % heroCount
-        } else {
-            nextIndex = (currentHeroIndex - 1 + heroCount) % heroCount
+        let translation = value.translation
+        guard abs(translation.width) > abs(translation.height),
+              abs(translation.width) > 8 else {
+            return
         }
 
-        moveHero(
-            to: nextIndex,
-            direction: translation.width < 0 ? .forward : .backward,
-            duration: 0.5
-        )
+        if !isHeroDragging {
+            pauseHeroRotation()
+            isHeroDragging = true
+        }
+
+        heroDragTargetIndex = adjacentHeroIndex(forDragOffset: translation.width)
+        heroDragOffset = resolvedHeroDragOffset(for: translation.width)
+    }
+
+    private func handleHeroDragEnded(_ value: DragGesture.Value, heroWidth: CGFloat) {
+        guard supportsDragNavigation, isHeroDragActive else { return }
+
+        let translation = value.translation
+        let horizontalDrag = abs(translation.width) > abs(translation.height)
+        let projectedOffset = resolvedHeroDragOffset(for: value.predictedEndTranslation.width)
+        let commitThreshold = max(heroWidth * 0.18, 56)
+        let targetIndex = heroDragTargetIndex
+
+        if horizontalDrag,
+           let targetIndex,
+           abs(projectedOffset) >= commitThreshold {
+            completeHeroDragTransition(to: targetIndex, heroWidth: heroWidth)
+        } else {
+            cancelHeroDragTransition()
+        }
     }
 
     #if os(tvOS)
@@ -589,6 +631,13 @@ struct HomeCinematicHero: View {
         heroSlideRevision += 1
         transitioningHeroIndex = nil
         heroSlideProgress = 1
+    }
+
+    private func resetHeroDragState() {
+        heroDragRevision += 1
+        heroDragOffset = 0
+        heroDragTargetIndex = nil
+        isHeroDragging = false
     }
 
     private func heroBackdropPrefetchSeed(width: Int, height: Int) -> String {
@@ -777,6 +826,8 @@ struct HomeCinematicHero: View {
     }
 
     private func moveHero(to index: Int, direction: HeroTransitionDirection, duration: TimeInterval) {
+        resetHeroDragState()
+
         let previousIndex = currentHeroIndex
         let slideRevision = heroSlideRevision + 1
 
@@ -815,6 +866,110 @@ struct HomeCinematicHero: View {
             return width * heroSlideProgress
         case (.backward, .incoming):
             return -width * (1 - heroSlideProgress)
+        }
+    }
+
+    private func foregroundHeroOffset(width: CGFloat) -> CGFloat {
+        if isHeroDragActive {
+            return heroDragOffset
+        }
+
+        return heroSlideOffset(for: .incoming, width: width)
+    }
+
+    private func backgroundHeroOffset(width: CGFloat) -> CGFloat {
+        if isHeroDragActive {
+            guard let heroDragTargetIndex,
+                  items.indices.contains(heroDragTargetIndex) else {
+                return 0
+            }
+
+            if heroDragOffset < 0 {
+                return width + heroDragOffset
+            } else {
+                return -width + heroDragOffset
+            }
+        }
+
+        return heroSlideOffset(for: .outgoing, width: width)
+    }
+
+    private func adjacentHeroIndex(forDragOffset offset: CGFloat) -> Int? {
+        guard heroItemIDs.count > 1 else { return nil }
+
+        if offset < 0 {
+            let nextIndex = currentHeroIndex + 1
+            return heroItemIDs.indices.contains(nextIndex) ? nextIndex : nil
+        }
+
+        if offset > 0 {
+            let previousIndex = currentHeroIndex - 1
+            return heroItemIDs.indices.contains(previousIndex) ? previousIndex : nil
+        }
+
+        return nil
+    }
+
+    private func resolvedHeroDragOffset(for rawOffset: CGFloat) -> CGFloat {
+        guard rawOffset != 0 else { return 0 }
+
+        guard adjacentHeroIndex(forDragOffset: rawOffset) != nil else {
+            return rawOffset * 0.18
+        }
+
+        return rawOffset
+    }
+
+    private func completeHeroDragTransition(to index: Int, heroWidth: CGFloat) {
+        guard heroWidth > 0 else {
+            currentHeroIndex = index
+            resetHeroDragState()
+            restartHeroRotation()
+            return
+        }
+
+        let dragRevision = heroDragRevision + 1
+        let finalOffset = heroDragOffset < 0 ? -heroWidth : heroWidth
+        let settleDuration = 0.24
+
+        heroDragRevision = dragRevision
+        isHeroDragging = false
+
+        withAnimation(.easeOut(duration: settleDuration)) {
+            heroDragOffset = finalOffset
+        }
+
+        Task {
+            try? await Task.sleep(nanoseconds: UInt64((settleDuration * 1_000_000_000).rounded()))
+
+            await MainActor.run {
+                guard heroDragRevision == dragRevision else { return }
+                currentHeroIndex = index
+                resetHeroDragState()
+                restartHeroRotation()
+            }
+        }
+    }
+
+    private func cancelHeroDragTransition() {
+        let dragRevision = heroDragRevision + 1
+        let settleDuration = 0.24
+
+        heroDragRevision = dragRevision
+        isHeroDragging = false
+
+        withAnimation(.easeOut(duration: settleDuration)) {
+            heroDragOffset = 0
+        }
+
+        Task {
+            try? await Task.sleep(nanoseconds: UInt64((settleDuration * 1_000_000_000).rounded()))
+
+            await MainActor.run {
+                guard heroDragRevision == dragRevision else { return }
+                resetHeroDragState()
+                restartHeroRotation()
+            }
         }
     }
 
