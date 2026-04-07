@@ -139,6 +139,10 @@ struct HomeHeroActionButtonLabel: View {
     let title: String
     let systemImage: String
 
+    #if os(tvOS)
+    private let minimumButtonWidth: CGFloat = 420
+    #endif
+
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: systemImage)
@@ -148,6 +152,10 @@ struct HomeHeroActionButtonLabel: View {
                 .font(.headline.weight(.semibold))
                 .lineLimit(1)
         }
+        #if os(tvOS)
+        .frame(minWidth: minimumButtonWidth)
+        .contentShape(Capsule())
+        #endif
         #if !os(tvOS)
         .foregroundStyle(Color.white)
         .padding(.horizontal, 18)
@@ -165,9 +173,17 @@ struct HomeHeroActionButtonLabel: View {
 struct HomeHeroSecondaryActionButtonLabel: View {
     let title: String
 
+    #if os(tvOS)
+    private let minimumButtonWidth: CGFloat = 420
+    #endif
+
     var body: some View {
         Text(title)
             .font(.headline.weight(.semibold))
+            #if os(tvOS)
+            .frame(minWidth: minimumButtonWidth)
+            .contentShape(Capsule())
+            #endif
             .foregroundStyle(Color.white)
             .padding(.horizontal, 20)
             .padding(.vertical, 14)

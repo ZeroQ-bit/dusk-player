@@ -153,6 +153,7 @@ struct UpNextPresentation: Sendable {
     let source: Source
     var shouldAutoplay: Bool
     let countdownDuration: Int
+    var countdownStartedAt: Date?
     var secondsRemaining: Int?
     var autoplayProgress: Double?
     let autoplayBlockedByPassoutProtection: Bool

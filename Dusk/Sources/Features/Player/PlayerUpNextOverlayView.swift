@@ -95,7 +95,7 @@ struct PlayerUpNextOverlayView: View {
             height: 720
         )
 
-        return ZStack(alignment: .bottomLeading) {
+        return ZStack {
             if let thumbnailURL {
                 DuskAsyncImage(url: thumbnailURL) { phase in
                     switch phase {
@@ -117,15 +117,21 @@ struct PlayerUpNextOverlayView: View {
                 endPoint: .bottom
             )
 
-            VStack(alignment: .leading, spacing: 4) {
-                if let subtitle = MediaTextFormatter.seasonEpisodeLabel(
-                    season: presentation.episode.parentIndex,
-                    episode: presentation.episode.index
-                ) {
-                    Text(subtitle)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.9))
-                        .lineLimit(1)
+            VStack {
+                Spacer()
+
+                HStack {
+                    if let subtitle = MediaTextFormatter.seasonEpisodeLabel(
+                        season: presentation.episode.parentIndex,
+                        episode: presentation.episode.index
+                    ) {
+                        Text(subtitle)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.9))
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 0)
                 }
             }
             .padding(12)
@@ -155,9 +161,13 @@ struct PlayerUpNextOverlayView: View {
                     .lineLimit(1)
             }
 
-            if presentation.shouldAutoplay,
-               let countdownLabel = presentation.secondsRemaining.map({ "Continues in \($0)s" }) {
-                countdownCard(label: countdownLabel, progress: presentation.autoplayProgress)
+            if presentation.shouldAutoplay {
+                countdownCard(
+                    duration: presentation.countdownDuration,
+                    startedAt: presentation.countdownStartedAt,
+                    fallbackLabel: presentation.secondsRemaining.map { "Continues in \($0)s" },
+                    fallbackProgress: presentation.autoplayProgress
+                )
                     .padding(.top, 8)
             }
 
@@ -247,32 +257,74 @@ struct PlayerUpNextOverlayView: View {
         }
     }
 
-    private func countdownCard(label: String, progress: Double?) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                Image(systemName: "play.circle.fill")
-                    .font(.headline)
-                    .foregroundStyle(Color.duskAccent)
+    private func countdownCard(
+        duration: Int,
+        startedAt: Date?,
+        fallbackLabel: String?,
+        fallbackProgress: Double?
+    ) -> some View {
+        let fallback = CountdownVisualState(
+            label: fallbackLabel ?? "Continues in \(duration)s",
+            progress: min(max(fallbackProgress ?? 0, 0), 1)
+        )
 
-                Text(label)
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(.white)
-            }
+        return TimelineView(.periodic(from: startedAt ?? .now, by: 0.1)) { context in
+            let visualState = countdownVisualState(
+                at: context.date,
+                duration: duration,
+                startedAt: startedAt,
+                fallback: fallback
+            )
 
-            GeometryReader { geometry in
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 10) {
+                    Image(systemName: "play.circle.fill")
+                        .font(.headline)
+                        .foregroundStyle(Color.duskAccent)
+
+                    Text(visualState.label)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.white)
+                }
+
                 ZStack(alignment: .leading) {
                     Capsule()
                         .fill(Color.white.opacity(0.14))
 
                     Capsule()
                         .fill(Color.duskAccent)
-                        .frame(width: geometry.size.width * max(0, min(progress ?? 0, 1)))
-                        .animation(.linear(duration: 1), value: progress ?? 0)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .scaleEffect(x: visualState.progress, y: 1, anchor: .leading)
+                        .animation(.linear(duration: 0.1), value: visualState.progress)
                 }
+                .frame(height: 6)
             }
-            .frame(height: 6)
         }
     }
+
+    private func countdownVisualState(
+        at date: Date,
+        duration: Int,
+        startedAt: Date?,
+        fallback: CountdownVisualState
+    ) -> CountdownVisualState {
+        guard let startedAt, duration > 0 else { return fallback }
+
+        let durationSeconds = Double(duration)
+        let elapsed = min(max(date.timeIntervalSince(startedAt), 0), durationSeconds)
+        let remaining = max(0, Int(ceil(durationSeconds - elapsed)))
+        let progress = min(max(elapsed / durationSeconds, 0), 1)
+
+        return CountdownVisualState(
+            label: "Continues in \(remaining)s",
+            progress: progress
+        )
+    }
+}
+
+private struct CountdownVisualState {
+    let label: String
+    let progress: Double
 }
 
 private struct UpNextLayoutMetrics {

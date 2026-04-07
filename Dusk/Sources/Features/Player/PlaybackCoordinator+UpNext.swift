@@ -16,6 +16,7 @@ extension PlaybackCoordinator {
         guard var upNextPresentation else { return }
         cancelUpNextCountdown()
         upNextPresentation.shouldAutoplay = false
+        upNextPresentation.countdownStartedAt = nil
         upNextPresentation.secondsRemaining = nil
         upNextPresentation.autoplayProgress = nil
         self.upNextPresentation = upNextPresentation
@@ -36,6 +37,7 @@ extension PlaybackCoordinator {
             source: source,
             shouldAutoplay: shouldAutoplay,
             countdownDuration: preferences.continuousPlayCountdown.rawValue,
+            countdownStartedAt: shouldAutoplay ? Date() : nil,
             secondsRemaining: shouldAutoplay ? preferences.continuousPlayCountdown.rawValue : nil,
             autoplayProgress: shouldAutoplay ? 0 : nil,
             autoplayBlockedByPassoutProtection: autoplayBlockedByPassoutProtection,
@@ -56,13 +58,12 @@ extension PlaybackCoordinator {
         upNextCountdownTask = Task { @MainActor [weak self] in
             guard let self else { return }
             let duration = Double(presentation.countdownDuration)
+            let startedAt = presentation.countdownStartedAt ?? Date()
 
             guard duration > 0 else {
                 await self.startUpNextPlayback(trigger: .autoplay)
                 return
             }
-
-            let startedAt = Date()
 
             while true {
                 if Task.isCancelled { return }
@@ -155,6 +156,7 @@ extension PlaybackCoordinator {
         guard var failedPresentation = upNextPresentation else { return }
         failedPresentation.isStarting = false
         failedPresentation.shouldAutoplay = false
+        failedPresentation.countdownStartedAt = nil
         failedPresentation.secondsRemaining = nil
         failedPresentation.autoplayProgress = nil
         failedPresentation.errorMessage = loadError ?? "Could not start the next episode."

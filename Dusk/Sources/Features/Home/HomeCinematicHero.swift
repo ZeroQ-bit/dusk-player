@@ -11,6 +11,8 @@ struct HomeCinematicHeroLayout {
     var contentTopPadding: CGFloat = 64
     var contentBottomPaddingWithPager: CGFloat = 52
     var contentBottomPaddingWithoutPager: CGFloat = 28
+    var actionsTopPadding: CGFloat = 0
+    var actionsBottomPadding: CGFloat = 0
     var pagerHorizontalPadding: CGFloat = 20
     var pagerBottomPadding: CGFloat = 28
     var titleFontSize: CGFloat = 42
@@ -30,6 +32,8 @@ struct HomeCinematicHeroLayout {
         contentTopPadding: 56,
         contentBottomPaddingWithPager: 60,
         contentBottomPaddingWithoutPager: 32,
+        actionsTopPadding: 12,
+        actionsBottomPadding: 12,
         pagerHorizontalPadding: 48,
         pagerBottomPadding: 32,
         titleFontSize: 46,
@@ -318,6 +322,8 @@ struct HomeCinematicHero: View {
                 }
 
                 heroActions(for: item)
+                    .padding(.top, layout.actionsTopPadding)
+                    .padding(.bottom, layout.actionsBottomPadding)
             }
             .padding(.leading, contentLeadingInset + layout.contentHorizontalPadding)
             .padding(.trailing, contentTrailingInset + layout.contentHorizontalPadding)
