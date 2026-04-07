@@ -212,7 +212,7 @@ struct HomeHeroPagerPill: View {
 
             if isActive {
                 Capsule()
-                    .fill(Color.duskAccent)
+                    .fill(Color.white)
                     .frame(
                         width: max((pillWidth - (fillInset * 2)) * clampedProgress, 0),
                         height: pillHeight - (fillInset * 2)

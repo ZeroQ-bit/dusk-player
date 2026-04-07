@@ -531,6 +531,7 @@ struct HomeCinematicHero: View {
         heroRotationRevision += 1
     }
 
+    #if !os(tvOS)
     private func handleHeroDragChanged(_ value: DragGesture.Value) {
         guard supportsDragNavigation,
               heroItemIDs.count > 1,
@@ -571,6 +572,7 @@ struct HomeCinematicHero: View {
             cancelHeroDragTransition()
         }
     }
+    #endif
 
     #if os(tvOS)
     private func handleHeroMoveCommand(_ direction: MoveCommandDirection) {
