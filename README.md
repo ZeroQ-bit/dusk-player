@@ -6,7 +6,8 @@ A native Swift/SwiftUI Plex client for Apple platforms.
 
 > **Warning:** This project is under very active development. Expect bugs and unexpected behavior. If you run into issues, please [submit an issue](https://github.com/marvinvr/dusk-player/issues).
 
-> **Download:** For now, the app needs to be compiled manually (see setup below). A TestFlight / App Store link will be added here in the near future.
+> **Download:**
+> [![Download on the App Store](https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg)](https://apps.apple.com/us/app/dusk-for-plex/id6760492635)
 
 ## Features
 
