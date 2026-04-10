@@ -85,6 +85,7 @@ private struct PlayerSessionView: View {
     @State private var viewModel: PlayerViewModel
     #if os(tvOS)
     @FocusState private var skipMarkerFocused: Bool
+    @FocusState private var backgroundFocused: Bool
     #endif
 
     private let playbackSource: PlaybackSource
@@ -255,6 +256,13 @@ private struct PlayerSessionView: View {
                 skipMarkerFocused = false
             }
         }
+        .onChange(of: viewModel.showControls) { _, isShowing in
+            if !isShowing && viewModel.activeSkipMarker == nil {
+                Task { @MainActor in
+                    backgroundFocused = true
+                }
+            }
+        }
         #endif
         #if !os(tvOS)
         .sheet(isPresented: $vm.showSubtitlePicker) {
@@ -300,6 +308,9 @@ private struct PlayerSessionView: View {
             Color.clear
                 .contentShape(Rectangle())
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .focusable()
+                .focused($backgroundFocused)
+                .onMoveCommand { _ in viewModel.toggleControls() }
                 .onTapGesture { viewModel.toggleControls() }
         }
         .ignoresSafeArea()
