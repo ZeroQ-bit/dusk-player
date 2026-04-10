@@ -23,6 +23,13 @@ struct HomeCinematicHeroLayout {
     var metadataFont: Font = .subheadline.weight(.medium)
     var summaryFont: Font = .body
     var summaryLineSpacing: CGFloat = 4
+    var bottomFadeStops: [Gradient.Stop] = [
+        .init(color: .clear, location: 0),
+        .init(color: Color.duskBackground.opacity(0.26), location: 0.7),
+        .init(color: Color.duskBackground, location: 1)
+    ]
+    var bottomFadeStartPoint: UnitPoint = .center
+    var bottomFadeEndPoint: UnitPoint = .bottom
 
     static let ios = HomeCinematicHeroLayout()
     static let tv = HomeCinematicHeroLayout(
@@ -44,7 +51,17 @@ struct HomeCinematicHeroLayout {
         episodeTitleFont: .title2.weight(.semibold),
         metadataFont: .headline.weight(.medium),
         summaryFont: .body,
-        summaryLineSpacing: 4
+        summaryLineSpacing: 4,
+        bottomFadeStops: [
+            .init(color: .clear, location: 0),
+            .init(color: Color.duskBackground.opacity(0.08), location: 0.5),
+            .init(color: Color.duskBackground.opacity(0.22), location: 0.68),
+            .init(color: Color.duskBackground.opacity(0.52), location: 0.84),
+            .init(color: Color.duskBackground.opacity(0.82), location: 0.95),
+            .init(color: Color.duskBackground, location: 1)
+        ],
+        bottomFadeStartPoint: UnitPoint(x: 0.5, y: 0.22),
+        bottomFadeEndPoint: .bottom
     )
 }
 
@@ -294,13 +311,9 @@ struct HomeCinematicHero: View {
                 )
 
                 LinearGradient(
-                    colors: [
-                        .clear,
-                        Color.duskBackground.opacity(0.26),
-                        Color.duskBackground,
-                    ],
-                    startPoint: .center,
-                    endPoint: .bottom
+                    stops: layout.bottomFadeStops,
+                    startPoint: layout.bottomFadeStartPoint,
+                    endPoint: layout.bottomFadeEndPoint
                 )
             }
             .allowsHitTesting(false)

@@ -240,9 +240,9 @@ struct EpisodeDetailView: View {
             } label: {
                 DetailHeroPrimaryActionButtonLabel(
                     title: "Play Episode",
-                    systemImage: "play.fill"
+                    systemImage: "play.fill",
+                    fillsWidth: usesFullWidthActionButtons
                 )
-                .frame(maxWidth: usesFullWidthActionButtons ? .infinity : nil)
             }
             #if os(tvOS)
             .buttonStyle(.glassProminent)
@@ -294,7 +294,7 @@ struct EpisodeDetailView: View {
     }
 
     private var usesFullWidthActionButtons: Bool {
-        sizeClass == .compact
+        usesFullWidthDetailActionButtons(for: sizeClass)
     }
 
     @ViewBuilder

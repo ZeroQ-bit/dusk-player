@@ -12,8 +12,6 @@ final class IOSVLCKitRenderingHost: NSObject, VLCKitRenderingHost, @unchecked Se
     private var durationMs: Int64 = 0
     private var mediaPlaying = false
     private var mediaSeekable = false
-    private var pendingAutomaticPiPStart = false
-    private var isPictureInPictureActive = false
     private var notificationObservers: [NSObjectProtocol] = []
 
     private var playHandler: (() -> Void)?
@@ -25,7 +23,6 @@ final class IOSVLCKitRenderingHost: NSObject, VLCKitRenderingHost, @unchecked Se
         self.playerView = IOSVLCPictureInPictureContainerView()
         super.init()
         playerView.backgroundColor = .black
-        observeApplicationLifecycle()
     }
 
     deinit {
@@ -114,12 +111,6 @@ final class IOSVLCKitRenderingHost: NSObject, VLCKitRenderingHost, @unchecked Se
             guard let self, let controller else { return }
 
             self.pictureInPictureController = controller
-            controller.stateChangeEventHandler = { [weak self] isStarted in
-                self?.isPictureInPictureActive = isStarted
-                if isStarted {
-                    self?.pendingAutomaticPiPStart = false
-                }
-            }
             controller.invalidatePlaybackState()
         }
     }
@@ -156,53 +147,6 @@ final class IOSVLCKitRenderingHost: NSObject, VLCKitRenderingHost, @unchecked Se
 
     func isMediaPlaying() -> Bool {
         mediaPlayer?.isPlaying ?? mediaPlaying
-    }
-
-    private func observeApplicationLifecycle() {
-        let notificationCenter = NotificationCenter.default
-        notificationObservers = [
-            notificationCenter.addObserver(
-                forName: UIApplication.willResignActiveNotification,
-                object: nil,
-                queue: .main
-            ) { [weak self] _ in
-                self?.pendingAutomaticPiPStart = self?.shouldStartPictureInPictureAutomatically ?? false
-            },
-            notificationCenter.addObserver(
-                forName: UIApplication.didBecomeActiveNotification,
-                object: nil,
-                queue: .main
-            ) { [weak self] _ in
-                self?.pendingAutomaticPiPStart = false
-            },
-            notificationCenter.addObserver(
-                forName: UIApplication.didEnterBackgroundNotification,
-                object: nil,
-                queue: .main
-            ) { [weak self] _ in
-                self?.startPictureInPictureIfNeeded()
-            },
-        ]
-    }
-
-    private var shouldStartPictureInPictureAutomatically: Bool {
-        MainActor.assumeIsolated {
-            pictureInPictureController != nil &&
-            !isPictureInPictureActive &&
-            isMediaPlaying() &&
-            playerView.window != nil &&
-            !playerView.bounds.isEmpty
-        }
-    }
-
-    private func startPictureInPictureIfNeeded() {
-        guard pendingAutomaticPiPStart, shouldStartPictureInPictureAutomatically else {
-            pendingAutomaticPiPStart = false
-            return
-        }
-
-        pendingAutomaticPiPStart = false
-        pictureInPictureController?.startPictureInPicture()
     }
 }
 

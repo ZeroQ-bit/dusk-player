@@ -48,6 +48,7 @@ protocol PlaybackEngine: AnyObject {
 
     /// Returns a platform-specific view that renders the video content.
     func makePlayerView() -> AnyView
+
 }
 
 @MainActor

@@ -125,7 +125,8 @@ private struct PlayerSessionView: View {
                 backwardSeekInterval: PlayerOverlayLayout.remoteSeekInterval,
                 forwardSeekInterval: PlayerOverlayLayout.remoteSeekInterval,
                 onSeek: { offset in viewModel.handleSeekJump(by: offset) },
-                onPrimaryActionWhenControlsHidden: { viewModel.togglePlayPause() }
+                onPlayPause: { viewModel.togglePlayPause() },
+                onRevealControlsWhenHidden: { viewModel.touchControls() }
             )
             .allowsHitTesting(false)
             .ignoresSafeArea()
@@ -450,7 +451,8 @@ private struct PlayerTVRemoteSeekBridge: UIViewRepresentable {
     var backwardSeekInterval: TimeInterval
     var forwardSeekInterval: TimeInterval
     var onSeek: (TimeInterval) -> Void
-    var onPrimaryActionWhenControlsHidden: () -> Void
+    var onPlayPause: () -> Void
+    var onRevealControlsWhenHidden: () -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
@@ -477,34 +479,48 @@ private struct PlayerTVRemoteSeekBridge: UIViewRepresentable {
 
         func sync(_ view: PlayerTVRemoteSeekView, with parent: PlayerTVRemoteSeekBridge) {
             self.parent = parent
-            view.isRemoteSeekEnabled = parent.isEnabled
+            view.isRemoteCaptureEnabled = parent.isEnabled &&
+                !parent.showsControls &&
+                !parent.hasActiveSkipMarker
             view.showsControls = parent.showsControls
             view.hasActiveSkipMarker = parent.hasActiveSkipMarker
             view.backwardSeekInterval = parent.backwardSeekInterval
             view.forwardSeekInterval = parent.forwardSeekInterval
             view.onSeek = parent.onSeek
-            view.onPrimaryActionWhenControlsHidden = parent.onPrimaryActionWhenControlsHidden
+            view.onPlayPause = parent.onPlayPause
+            view.onRevealControlsWhenHidden = parent.onRevealControlsWhenHidden
             view.refreshFirstResponderStatus()
         }
     }
 }
 
 private final class PlayerTVRemoteSeekView: UIView {
-    var isRemoteSeekEnabled = false {
+    var isRemoteCaptureEnabled = false {
         didSet {
             refreshFirstResponderStatus()
         }
     }
 
-    var showsControls = true
-    var hasActiveSkipMarker = false
+    var showsControls = true {
+        didSet {
+            refreshFirstResponderStatus()
+        }
+    }
+
+    var hasActiveSkipMarker = false {
+        didSet {
+            refreshFirstResponderStatus()
+        }
+    }
+
     var backwardSeekInterval: TimeInterval = 0
     var forwardSeekInterval: TimeInterval = 0
     var onSeek: ((TimeInterval) -> Void)?
-    var onPrimaryActionWhenControlsHidden: (() -> Void)?
+    var onPlayPause: (() -> Void)?
+    var onRevealControlsWhenHidden: (() -> Void)?
 
     override var canBecomeFirstResponder: Bool {
-        isRemoteSeekEnabled && window != nil
+        isRemoteCaptureEnabled && window != nil
     }
 
     override func didMoveToWindow() {
@@ -513,8 +529,18 @@ private final class PlayerTVRemoteSeekView: UIView {
     }
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        guard isRemoteSeekEnabled else {
+        guard isRemoteCaptureEnabled else {
             super.pressesBegan(presses, with: event)
+            return
+        }
+
+        if presses.contains(where: { $0.type == .playPause }) {
+            onPlayPause?()
+            return
+        }
+
+        if presses.contains(where: { $0.type == .menu }) {
+            onRevealControlsWhenHidden?()
             return
         }
 
@@ -531,7 +557,7 @@ private final class PlayerTVRemoteSeekView: UIView {
         if presses.contains(where: { $0.type == .select }),
            !showsControls,
            !hasActiveSkipMarker {
-            onPrimaryActionWhenControlsHidden?()
+            onRevealControlsWhenHidden?()
             return
         }
 
@@ -541,10 +567,10 @@ private final class PlayerTVRemoteSeekView: UIView {
     func refreshFirstResponderStatus() {
         guard window != nil else { return }
 
-        if isRemoteSeekEnabled {
+        if isRemoteCaptureEnabled {
             guard !isFirstResponder else { return }
             DispatchQueue.main.async { [weak self] in
-                guard let self, self.isRemoteSeekEnabled, self.window != nil else { return }
+                guard let self, self.isRemoteCaptureEnabled, self.window != nil else { return }
                 self.becomeFirstResponder()
             }
         } else if isFirstResponder {

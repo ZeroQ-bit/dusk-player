@@ -210,9 +210,9 @@ struct MovieDetailView: View {
             } label: {
                 DetailHeroPrimaryActionButtonLabel(
                     title: viewModel.formattedResume.map { "Resume from \($0)" } ?? "Play",
-                    systemImage: "play.fill"
+                    systemImage: "play.fill",
+                    fillsWidth: usesFullWidthActionButtons
                 )
-                .frame(maxWidth: usesFullWidthActionButtons ? .infinity : nil)
             }
             #if os(tvOS)
             .buttonStyle(.glassProminent)
@@ -251,7 +251,7 @@ struct MovieDetailView: View {
     }
 
     private var usesFullWidthActionButtons: Bool {
-        sizeClass == .compact
+        usesFullWidthDetailActionButtons(for: sizeClass)
     }
 
     // MARK: - Summary

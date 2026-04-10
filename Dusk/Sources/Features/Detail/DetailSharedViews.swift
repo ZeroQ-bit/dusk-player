@@ -2,6 +2,15 @@ import SwiftUI
 
 // MARK: - Detail Hero Section
 
+@MainActor
+func usesFullWidthDetailActionButtons(for sizeClass: UserInterfaceSizeClass?) -> Bool {
+    #if os(iOS)
+    sizeClass == .compact && UIDevice.current.userInterfaceIdiom == .phone
+    #else
+    false
+    #endif
+}
+
 struct DetailHeroSection<Supertitle: View, Subtitle: View, Actions: View>: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
 
@@ -299,6 +308,7 @@ struct DetailHeroSecondaryActionButtonLabel: View {
 struct DetailHeroPrimaryActionButtonLabel: View {
     let title: String
     let systemImage: String
+    var fillsWidth: Bool = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -310,9 +320,10 @@ struct DetailHeroPrimaryActionButtonLabel: View {
                 .lineLimit(1)
         }
         #if !os(tvOS)
+        .frame(maxWidth: fillsWidth ? .infinity : nil)
         .foregroundStyle(Color.white)
         .padding(.vertical, 14)
-        .padding(.horizontal, 18)
+        .padding(.horizontal, fillsWidth ? 0 : 18)
         .background(Color.duskAccent)
         .clipShape(Capsule())
         #endif

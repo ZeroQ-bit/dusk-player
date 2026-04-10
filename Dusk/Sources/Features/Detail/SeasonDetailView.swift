@@ -195,7 +195,7 @@ struct SeasonDetailView: View {
     }
 
     private var usesFullWidthActionButtons: Bool {
-        sizeClass == .compact
+        usesFullWidthDetailActionButtons(for: sizeClass)
     }
 
     @ViewBuilder
@@ -335,9 +335,9 @@ private struct SeasonHeroActions: View {
             } label: {
                 DetailHeroPrimaryActionButtonLabel(
                     title: playButtonLabel,
-                    systemImage: "play.fill"
+                    systemImage: "play.fill",
+                    fillsWidth: usesFullWidthActionButtons
                 )
-                .frame(maxWidth: usesFullWidthActionButtons ? .infinity : nil)
             }
             #if os(tvOS)
             .buttonStyle(.glassProminent)

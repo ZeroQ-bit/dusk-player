@@ -171,7 +171,7 @@ private extension StreamResolver {
         }
 
         var bitrate: Int {
-            media.bitrate ?? 0
+            Self.resolveBitrate(for: media)
         }
 
         var isOptimizedForStreaming: Bool {
@@ -181,6 +181,11 @@ private extension StreamResolver {
         private static func resolveHeight(for media: PlexMedia) -> Int? {
             if let height = media.height, height > 0 {
                 return height
+            }
+
+            if let streamHeight = primaryVideoStream(in: media)?.height,
+               streamHeight > 0 {
+                return streamHeight
             }
 
             guard let resolution = media.videoResolution?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
@@ -198,6 +203,29 @@ private extension StreamResolver {
                 guard !digits.isEmpty else { return nil }
                 return digits.reduce(0) { ($0 * 10) + $1 }
             }
+        }
+
+        private static func resolveBitrate(for media: PlexMedia) -> Int {
+            if let bitrate = media.bitrate, bitrate > 0 {
+                return bitrate
+            }
+
+            if let streamBitrate = primaryVideoStream(in: media)?.bitrate,
+               streamBitrate > 0 {
+                return streamBitrate
+            }
+
+            return 0
+        }
+
+        private static func primaryVideoStream(in media: PlexMedia) -> PlexStream? {
+            for part in media.parts {
+                if let stream = part.streams.first(where: { $0.streamType == .video }) {
+                    return stream
+                }
+            }
+
+            return nil
         }
     }
 
