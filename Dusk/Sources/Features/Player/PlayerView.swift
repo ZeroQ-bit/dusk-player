@@ -261,6 +261,8 @@ private struct PlayerSessionView: View {
                 Task { @MainActor in
                     backgroundFocused = true
                 }
+            } else if isShowing {
+                backgroundFocused = false
             }
         }
         #endif
@@ -310,7 +312,11 @@ private struct PlayerSessionView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .focusable()
                 .focused($backgroundFocused)
-                .onMoveCommand { _ in viewModel.toggleControls() }
+                .onMoveCommand { _ in
+                    if !viewModel.showControls {
+                        viewModel.toggleControls()
+                    }
+                }
                 .onTapGesture { viewModel.toggleControls() }
         }
         .ignoresSafeArea()
