@@ -241,11 +241,9 @@ private struct PlayerSessionView: View {
             #endif
         }
         .onDisappear { viewModel.cleanup() }
-        #if os(tvOS)
         .onChange(of: scenePhase) { _, newPhase in
             playback.flushTimelineForScenePhase(newPhase)
         }
-        #endif
         #if os(tvOS)
         .onChange(of: viewModel.activeSkipMarker?.id) { _, _ in
             if viewModel.activeSkipMarker != nil {

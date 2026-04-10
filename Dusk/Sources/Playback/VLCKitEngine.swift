@@ -182,6 +182,12 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
         syncRendererPlaybackState()
     }
 
+    func handleReturnToForeground() {
+        #if os(iOS)
+        refreshVideoOutputAfterResume()
+        #endif
+    }
+
     func seek(to position: TimeInterval) {
         let clampedPosition: TimeInterval
         if duration > 0 {

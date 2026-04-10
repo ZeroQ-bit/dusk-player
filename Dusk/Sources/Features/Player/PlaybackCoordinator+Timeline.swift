@@ -62,7 +62,7 @@ extension PlaybackCoordinator {
             }
             reportCurrentTimeline(stateOverride: .paused)
         case .active:
-            break
+            engine?.handleReturnToForeground()
         @unknown default:
             break
         }

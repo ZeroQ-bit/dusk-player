@@ -26,6 +26,10 @@ protocol PlaybackEngine: AnyObject {
     func stop()
     func seek(to position: TimeInterval)
 
+    /// Called when the app returns to foreground after being backgrounded.
+    /// Engines should restore their video rendering pipeline here.
+    func handleReturnToForeground()
+
     // MARK: - State
 
     var state: PlaybackState { get }

@@ -155,6 +155,13 @@ final class AVPlayerEngine: PlaybackEngine {
         player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
     }
 
+    func handleReturnToForeground() {
+        // Re-attach the player to its layer to restore the GPU rendering pipeline
+        // that iOS tears down when the app is backgrounded.
+        playerLayer.player = nil
+        playerLayer.player = player
+    }
+
     // MARK: - Track Selection
 
     func selectSubtitleTrack(_ track: SubtitleTrack?) {
