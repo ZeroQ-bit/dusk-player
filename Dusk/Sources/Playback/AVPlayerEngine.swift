@@ -161,6 +161,13 @@ final class AVPlayerEngine: PlaybackEngine {
         // that iOS tears down when the app is backgrounded.
         playerLayer.player = nil
         playerLayer.player = player
+
+        // Force AVPlayer to decode and display the current keyframe now,
+        // so the frame is already visible before the user presses play.
+        let currentTime = player.currentTime()
+        if currentTime.isValid && !currentTime.isIndefinite {
+            player.seek(to: currentTime, toleranceBefore: .zero, toleranceAfter: .zero)
+        }
     }
 
     // MARK: - Track Selection

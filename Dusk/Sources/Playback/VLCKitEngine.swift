@@ -77,6 +77,7 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
     @ObservationIgnored nonisolated(unsafe) private var seekVerificationTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var loadValidationTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var videoRefreshTask: Task<Void, Never>?
+    @ObservationIgnored private var needsVideoRefreshOnPlay = false
 
     override init() {
         let player = VLCMediaPlayer()
@@ -153,7 +154,11 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
         let wasPaused = state == .paused
         suppressPlaybackEndedEvent = false
         mediaPlayer.play()
-        if wasPaused {
+        if wasPaused || needsVideoRefreshOnPlay {
+            if needsVideoRefreshOnPlay {
+                needsVideoRefreshOnPlay = false
+                refreshVideoOutputAfterResume()
+            }
             scheduleVideoOutputRefreshAfterResume()
         }
         syncRendererPlaybackState()
@@ -185,7 +190,9 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
 
     func handleReturnToForeground() {
         #if os(iOS)
-        refreshVideoOutputAfterResume()
+        // VLCKit ignores track re-selection while paused, so defer the
+        // video output refresh until play() is called.
+        needsVideoRefreshOnPlay = true
         #endif
     }
 
