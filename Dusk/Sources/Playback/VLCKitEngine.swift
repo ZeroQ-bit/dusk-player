@@ -165,6 +165,7 @@ final class VLCKitEngine: NSObject, PlaybackEngine {
         videoRefreshTask?.cancel()
         videoRefreshTask = nil
         mediaPlayer.pause()
+        state = .paused
         syncRendererPlaybackState()
     }
 

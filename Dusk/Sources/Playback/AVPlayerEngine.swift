@@ -124,6 +124,7 @@ final class AVPlayerEngine: PlaybackEngine {
 
     func pause() {
         player.pause()
+        state = .paused
     }
 
     func stop() {
