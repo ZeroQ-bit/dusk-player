@@ -270,7 +270,7 @@
 		0B42A00C8A899B9036425B3E /* PlexServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlexServer.swift; sourceTree = "<group>"; };
 		0EE5CB18DA40CB3B2F6AA4CA /* PlexUser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlexUser.swift; sourceTree = "<group>"; };
 		0FBE9B40CB6E7F23A88BAA00 /* ShowDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShowDetailViewModel.swift; sourceTree = "<group>"; };
-		121B83543AC4BD8A706FD80B /* Dusk.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Dusk.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		121B83543AC4BD8A706FD80B /* Dusk.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Dusk.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		124D4F0CD015D34571A61801 /* ServerPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerPickerView.swift; sourceTree = "<group>"; };
 		1381933827E832D2448FF0DB /* LibraryItemsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryItemsViewModel.swift; sourceTree = "<group>"; };
 		1465A76C131A58D985D6EF8B /* LibrariesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrariesView.swift; sourceTree = "<group>"; };
@@ -341,7 +341,7 @@
 		9A8C5D8503032DFB2DDEC895 /* PlaybackCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackCoordinator.swift; sourceTree = "<group>"; };
 		9E6A19842481580689AEC855 /* HomeCinematicHero.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeCinematicHero.swift; sourceTree = "<group>"; };
 		A09EA98DBA7E79D3476F1D39 /* PlayerControlsTVOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerControlsTVOverlay.swift; sourceTree = "<group>"; };
-		A3658E173CAB9A21489A636A /* Dusk-tvOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "Dusk-tvOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		A3658E173CAB9A21489A636A /* Dusk.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Dusk.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A904B86FC535FC7ADFADE196 /* VLCKitRendererTVOS.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VLCKitRendererTVOS.swift; sourceTree = "<group>"; };
 		AC85B7143D7774B74A1855BF /* PosterCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PosterCard.swift; sourceTree = "<group>"; };
 		ACFFB965A834EEB6A4372345 /* PlaybackEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackEngine.swift; sourceTree = "<group>"; };
@@ -428,7 +428,7 @@
 		1CB985811D3A12B7D2FB4419 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				A3658E173CAB9A21489A636A /* Dusk-tvOS.app */,
+				A3658E173CAB9A21489A636A /* Dusk.app */,
 				121B83543AC4BD8A706FD80B /* Dusk.app */,
 			);
 			name = Products;
@@ -683,7 +683,7 @@
 			packageProductDependencies = (
 			);
 			productName = "Dusk-tvOS";
-			productReference = A3658E173CAB9A21489A636A /* Dusk-tvOS.app */;
+			productReference = A3658E173CAB9A21489A636A /* Dusk.app */;
 			productType = "com.apple.product-type.application";
 		};
 		9F2F34542FD6C75BD284834F /* Dusk */ = {
@@ -713,11 +713,8 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 1600;
+				LastUpgradeCheck = 2640;
 				TargetAttributes = {
-					23B6BD169B5570FCE5D186ED = {
-						DevelopmentTeam = "";
-					};
 					9F2F34542FD6C75BD284834F = {
 						DevelopmentTeam = "";
 					};
@@ -1011,12 +1008,16 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEVELOPMENT_TEAM = "";
 				FRAMEWORK_SEARCH_PATHS = (
-					"$(inherited) $(PROJECT_DIR)/Frameworks",
+					"$(inherited)",
+					"$(PROJECT_DIR)/Frameworks",
 					"\"Frameworks\"",
 				);
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "Dusk/Support/Info-iOS.plist";
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = "com.dusk-player.app";
 				SDKROOT = iphoneos;
 				SWIFT_STRICT_CONCURRENCY = complete;
@@ -1028,6 +1029,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -1059,9 +1061,11 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -1076,6 +1080,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 6.0;
@@ -1092,12 +1097,16 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEVELOPMENT_TEAM = "";
 				FRAMEWORK_SEARCH_PATHS = (
-					"$(inherited) $(PROJECT_DIR)/Frameworks",
+					"$(inherited)",
+					"$(PROJECT_DIR)/Frameworks",
 					"\"Frameworks\"",
 				);
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "Dusk/Support/Info-iOS.plist";
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = "com.dusk-player.app";
 				SDKROOT = iphoneos;
 				SWIFT_STRICT_CONCURRENCY = complete;
@@ -1109,6 +1118,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -1140,9 +1150,11 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -1164,6 +1176,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 6.0;
@@ -1177,9 +1190,10 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIconTV;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = "";
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = D278M74A3H;
 				FRAMEWORK_SEARCH_PATHS = (
-					"$(inherited) $(PROJECT_DIR)/Frameworks",
+					"$(inherited)",
+					"$(PROJECT_DIR)/Frameworks",
 					"\"Frameworks\"",
 				);
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
@@ -1188,7 +1202,10 @@
 				INFOPLIST_KEY_UILaunchScreen_UIColorName = LaunchBackground;
 				INFOPLIST_KEY_UILaunchScreen_UIImageName = LaunchLogo;
 				INFOPLIST_KEY_UILaunchScreen_UIImageRespectsSafeAreaInsets = NO;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = "com.dusk-player.app";
 				PRODUCT_NAME = Dusk;
 				SDKROOT = appletvos;
@@ -1203,9 +1220,10 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIconTV;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = "";
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = D278M74A3H;
 				FRAMEWORK_SEARCH_PATHS = (
-					"$(inherited) $(PROJECT_DIR)/Frameworks",
+					"$(inherited)",
+					"$(PROJECT_DIR)/Frameworks",
 					"\"Frameworks\"",
 				);
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
@@ -1214,7 +1232,10 @@
 				INFOPLIST_KEY_UILaunchScreen_UIColorName = LaunchBackground;
 				INFOPLIST_KEY_UILaunchScreen_UIImageName = LaunchLogo;
 				INFOPLIST_KEY_UILaunchScreen_UIImageRespectsSafeAreaInsets = NO;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = "com.dusk-player.app";
 				PRODUCT_NAME = Dusk;
 				SDKROOT = appletvos;
