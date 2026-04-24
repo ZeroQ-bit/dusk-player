@@ -1,7 +1,11 @@
 import SwiftUI
 
 enum SettingsSupport {
-    static let playbackDefaultsFooterText = "Choose preferred stream quality and default audio or subtitle languages. Forced Only limits automatic subtitle selection to forced tracks."
+    static let maxSubtitleLanguagePreferenceCount = 5
+    static let playbackDefaultsFooterText = "Choose preferred stream quality, default audio, and up to five subtitle languages. Dusk tries subtitle languages from top to bottom. Forced Only limits automatic subtitle selection to forced tracks."
+    static let subtitlePreferencesEditorFooterText = "Choose up to five subtitle languages. Dusk tries them in order from top to bottom. To change priority, remove a language and add it again."
+    static let subtitlePreferencesSelectionFooterText = "Tap a language to add it. Tap it again to remove it."
+    static let subtitlePreferencesSelectionLimitFooterText = "Maximum of five subtitle languages selected. Remove one to add another."
 
     #if os(tvOS)
     static let playbackBehaviorFooterText = "Auto-Skip automatically skips intros and credits after a brief countdown. Continuous Play shows an Up Next screen after TV episodes finish and can auto-start the next one after the configured delay. Pause After counts the current episode too, then pauses autoplay until you confirm."
@@ -30,6 +34,10 @@ enum SettingsSupport {
         return options
     }
 
+    static var subtitleSelectableLanguageOptions: [String] {
+        subtitleLanguageOptions.filter { !$0.isEmpty }
+    }
+
     static var audioLanguageOptions: [String] {
         CommonLanguage.allCases.map(\.code)
     }
@@ -38,12 +46,12 @@ enum SettingsSupport {
         [nil] + Array(1...10).map(Optional.some)
     }
 
-    @MainActor
-    static func subtitleLanguageBinding(_ preferences: UserPreferences) -> Binding<String> {
-        Binding(
-            get: { preferences.defaultSubtitleLanguage ?? "" },
-            set: { preferences.defaultSubtitleLanguage = $0.isEmpty ? nil : $0 }
-        )
+    static func subtitlePreferenceSummary(for languageCodes: [String]) -> String {
+        let selectedLanguages = Array(languageCodes.prefix(maxSubtitleLanguagePreferenceCount))
+        guard !selectedLanguages.isEmpty else { return "None" }
+        return selectedLanguages
+            .map(languageDisplayName(for:))
+            .joined(separator: " > ")
     }
 
     static func subtitleDisplayName(for code: String) -> String {
@@ -61,6 +69,141 @@ enum SettingsSupport {
     static func passoutProtectionDisplayName(for episodeLimit: Int?) -> String {
         guard let episodeLimit else { return "Disabled" }
         return episodeLimit == 1 ? "1 Episode" : "\(episodeLimit) Episodes"
+    }
+}
+
+struct SubtitleLanguagePreferencesSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedLanguages: [String]
+    private let onSave: @MainActor ([String]) -> Void
+
+    init(
+        selectedLanguages: [String],
+        onSave: @escaping @MainActor ([String]) -> Void
+    ) {
+        _selectedLanguages = State(
+            initialValue: Array(selectedLanguages.prefix(SettingsSupport.maxSubtitleLanguagePreferenceCount))
+        )
+        self.onSave = onSave
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    if selectedLanguages.isEmpty {
+                        Text("No subtitle languages selected")
+                            .foregroundStyle(Color.duskTextSecondary)
+                    } else {
+                        ForEach(Array(selectedLanguages.enumerated()), id: \.element) { index, languageCode in
+                            HStack(spacing: 12) {
+                                SubtitleLanguagePriorityBadge(rank: index + 1)
+
+                                Text(SettingsSupport.languageDisplayName(for: languageCode))
+                                    .foregroundStyle(Color.duskTextPrimary)
+
+                                Spacer()
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Selected")
+                        .foregroundStyle(Color.duskTextSecondary)
+                } footer: {
+                    Text(SettingsSupport.subtitlePreferencesEditorFooterText)
+                        .foregroundStyle(Color.duskTextSecondary)
+                }
+                .listRowBackground(Color.duskSurface)
+
+                Section {
+                    ForEach(SettingsSupport.subtitleSelectableLanguageOptions, id: \.self) { languageCode in
+                        Button {
+                            toggleSelection(for: languageCode)
+                        } label: {
+                            HStack(spacing: 12) {
+                                Text(SettingsSupport.languageDisplayName(for: languageCode))
+                                    .foregroundStyle(Color.duskTextPrimary)
+
+                                Spacer()
+
+                                if let selectedIndex = selectedLanguages.firstIndex(of: languageCode) {
+                                    SubtitleLanguagePriorityBadge(rank: selectedIndex + 1)
+
+                                    Image(systemName: "checkmark")
+                                        .font(.footnote.weight(.semibold))
+                                        .foregroundStyle(Color.duskAccent)
+                                }
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .disabled(!canSelect(languageCode))
+                    }
+                } header: {
+                    Text("All Languages")
+                        .foregroundStyle(Color.duskTextSecondary)
+                } footer: {
+                    Text(selectionFooterText)
+                        .foregroundStyle(Color.duskTextSecondary)
+                }
+                .listRowBackground(Color.duskSurface)
+            }
+            #if !os(tvOS)
+            .scrollContentBackground(.hidden)
+            #endif
+            .background(Color.duskBackground.ignoresSafeArea())
+            .duskNavigationTitle("Subtitles")
+            .duskNavigationBarTitleDisplayModeInline()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        onSave(selectedLanguages)
+                        dismiss()
+                    }
+                }
+            }
+        }
+        #if !os(tvOS)
+        .presentationDetents([.medium, .large])
+        #endif
+    }
+
+    private var selectionFooterText: String {
+        if selectedLanguages.count >= SettingsSupport.maxSubtitleLanguagePreferenceCount {
+            return SettingsSupport.subtitlePreferencesSelectionLimitFooterText
+        }
+
+        return SettingsSupport.subtitlePreferencesSelectionFooterText
+    }
+
+    private func canSelect(_ languageCode: String) -> Bool {
+        selectedLanguages.contains(languageCode)
+            || selectedLanguages.count < SettingsSupport.maxSubtitleLanguagePreferenceCount
+    }
+
+    private func toggleSelection(for languageCode: String) {
+        if let selectedIndex = selectedLanguages.firstIndex(of: languageCode) {
+            selectedLanguages.remove(at: selectedIndex)
+        } else if selectedLanguages.count < SettingsSupport.maxSubtitleLanguagePreferenceCount {
+            selectedLanguages.append(languageCode)
+        }
+    }
+}
+
+private struct SubtitleLanguagePriorityBadge: View {
+    let rank: Int
+
+    var body: some View {
+        Text("\(rank)")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(Color.duskAccent)
+            .frame(minWidth: 26, minHeight: 26)
+            .background(Color.duskAccent.opacity(0.14), in: Capsule())
     }
 }
 
@@ -84,6 +227,9 @@ enum CommonLanguage: String, CaseIterable, Identifiable {
     case finnish = "fi"
     case polish = "pl"
     case czech = "cs"
+    case croatian = "hr"
+    case serbian = "sr"
+    case bosnian = "bs"
     case turkish = "tr"
     case thai = "th"
     case vietnamese = "vi"
@@ -115,6 +261,9 @@ enum CommonLanguage: String, CaseIterable, Identifiable {
         case .finnish: "Finnish"
         case .polish: "Polish"
         case .czech: "Czech"
+        case .croatian: "Croatian"
+        case .serbian: "Serbian"
+        case .bosnian: "Bosnian"
         case .turkish: "Turkish"
         case .thai: "Thai"
         case .vietnamese: "Vietnamese"

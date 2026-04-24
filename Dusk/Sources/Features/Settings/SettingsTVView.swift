@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsTVView: View {
     @Environment(PlexService.self) private var plexService
     @Environment(UserPreferences.self) private var preferences
+    @State private var subtitlePreferencesPresented = false
     @Binding var path: NavigationPath
     let viewModel: SettingsViewModel
 
@@ -10,11 +11,17 @@ struct SettingsTVView: View {
         SettingsContainer(path: $path, viewModel: viewModel) {
             settingsContent
         }
+        .sheet(isPresented: $subtitlePreferencesPresented) {
+            SubtitleLanguagePreferencesSheet(
+                selectedLanguages: preferences.defaultSubtitleLanguages
+            ) { selectedLanguages in
+                preferences.defaultSubtitleLanguages = selectedLanguages
+            }
+        }
     }
 
     private var settingsContent: some View {
         @Bindable var preferences = preferences
-        let subtitleLanguageBinding = SettingsSupport.subtitleLanguageBinding(preferences)
 
         return ScrollView {
             VStack(alignment: .leading, spacing: 32) {
@@ -28,12 +35,16 @@ struct SettingsTVView: View {
 
                     tvRowDivider
 
-                    TVSettingsMenuRow(
+                    TVSettingsActionRow(
                         title: "Subtitles",
-                        options: SettingsSupport.subtitleLanguageOptions,
-                        selection: subtitleLanguageBinding,
-                        selectedTitle: SettingsSupport.subtitleDisplayName(for: subtitleLanguageBinding.wrappedValue)
-                    ) { SettingsSupport.subtitleDisplayName(for: $0) }
+                        tint: Color.duskTextPrimary,
+                        showsChevron: true,
+                        detail: SettingsSupport.subtitlePreferenceSummary(
+                            for: preferences.defaultSubtitleLanguages
+                        )
+                    ) {
+                        subtitlePreferencesPresented = true
+                    }
 
                     tvRowDivider
 

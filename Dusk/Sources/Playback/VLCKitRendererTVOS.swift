@@ -2,8 +2,9 @@
 import UIKit
 import VLCKit
 
-final class TVOSVLCKitRenderingHost: NSObject, VLCKitRenderingHost, @unchecked Sendable {
+final class TVOSVLCKitRenderingHost: NSObject, VLCKitRenderingHost, @unchecked Sendable, VLCDrawable {
     let playerView: UIView
+    private var hostedVideoView: UIView?
 
     @MainActor
     override init() {
@@ -14,11 +15,15 @@ final class TVOSVLCKitRenderingHost: NSObject, VLCKitRenderingHost, @unchecked S
     }
 
     func attach(to player: VLCMediaPlayer, engine: VLCKitEngine) {
-        player.drawable = playerView
+        player.drawable = self
     }
 
     func detach(from player: VLCMediaPlayer) {
         player.drawable = nil
+        MainActor.assumeIsolated {
+            hostedVideoView?.removeFromSuperview()
+            hostedVideoView = nil
+        }
     }
 
     func updatePlaybackState(
@@ -29,5 +34,23 @@ final class TVOSVLCKitRenderingHost: NSObject, VLCKitRenderingHost, @unchecked S
     ) {}
 
     func invalidatePlaybackState() {}
+
+    func addSubview(_ view: UIView) {
+        MainActor.assumeIsolated {
+            if hostedVideoView !== view {
+                hostedVideoView?.removeFromSuperview()
+                hostedVideoView = view
+                view.frame = playerView.bounds
+                view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+                playerView.addSubview(view)
+            }
+        }
+    }
+
+    func bounds() -> CGRect {
+        MainActor.assumeIsolated {
+            playerView.bounds
+        }
+    }
 }
 #endif

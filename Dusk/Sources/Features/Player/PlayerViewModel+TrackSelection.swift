@@ -54,34 +54,40 @@ extension PlayerViewModel {
             let forcedTracks = subtitleTracks.filter { $0.isForced || Self.containsForcedMarker($0.displayTitle) }
             guard !forcedTracks.isEmpty else { return nil }
 
-            if let preferredSubtitleLanguage {
-                return rankedSubtitleTrack(
+            if let preferredTrack = rankedSubtitleTrack(
                     from: forcedTracks,
-                    preferredLanguage: preferredSubtitleLanguage,
+                    preferredLanguages: preferredSubtitleLanguages,
                     preferForcedTracks: true
-                )
+                ) {
+                return preferredTrack
             }
 
             return forcedTracks.sorted(by: Self.subtitleOrdering(preferForcedTracks: true)).first
         }
 
-        guard let preferredSubtitleLanguage else { return nil }
+        guard !preferredSubtitleLanguages.isEmpty else { return nil }
         return rankedSubtitleTrack(
             from: subtitleTracks,
-            preferredLanguage: preferredSubtitleLanguage,
+            preferredLanguages: preferredSubtitleLanguages,
             preferForcedTracks: false
         )
     }
 
     func rankedSubtitleTrack(
         from tracks: [SubtitleTrack],
-        preferredLanguage: String,
+        preferredLanguages: [String],
         preferForcedTracks: Bool
     ) -> SubtitleTrack? {
-        tracks
-            .filter { Self.normalizedLanguageCode($0.languageCode) == preferredLanguage }
-            .sorted(by: Self.subtitleOrdering(preferForcedTracks: preferForcedTracks))
-            .first
+        for preferredLanguage in preferredLanguages {
+            if let match = tracks
+                .filter({ Self.normalizedLanguageCode($0.languageCode) == preferredLanguage })
+                .sorted(by: Self.subtitleOrdering(preferForcedTracks: preferForcedTracks))
+                .first {
+                return match
+            }
+        }
+
+        return nil
     }
 
     func resolvedSelectedAudioTrackID() -> Int? {
