@@ -162,9 +162,7 @@ extension PlexService {
     }
 
     var displayScale: CGFloat {
-        #if os(tvOS)
-        1
-        #elseif canImport(UIKit)
+        #if canImport(UIKit)
         UIScreen.main.scale
         #else
         1

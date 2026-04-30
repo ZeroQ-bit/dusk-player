@@ -78,7 +78,6 @@ extension PlaybackError {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.cachePolicy = .reloadIgnoringLocalCacheData
-        request.timeoutInterval = 5
         request.setValue("bytes=0-1", forHTTPHeaderField: "Range")
 
         do {
@@ -90,24 +89,18 @@ extension PlaybackError {
 
             guard (200...299).contains(http.statusCode) else {
                 let responseText = try await readPrefix(from: bytes, limit: 4096)
-                let failure = mapDirectPlayFailure(
+                return mapDirectPlayFailure(
                     statusCode: http.statusCode,
                     responseText: responseText,
                     fallback: directPlayFallbackMessage
                 )
-                return shouldIgnoreValidationFailure(failure, statusCode: http.statusCode, url: url)
-                    ? nil
-                    : failure
             }
 
             return nil
         } catch is CancellationError {
             return nil
         } catch {
-            let failure = fromPlaybackFailure(error: error, fallback: directPlayFallbackMessage)
-            return shouldIgnoreValidationFailure(failure, statusCode: nil, url: url)
-                ? nil
-                : failure
+            return fromPlaybackFailure(error: error, fallback: directPlayFallbackMessage)
         }
     }
 
@@ -252,29 +245,6 @@ extension PlaybackError {
         .trimmingCharacters(in: .whitespacesAndNewlines)
 
         return collapsedWhitespace.isEmpty ? nil : collapsedWhitespace
-    }
-
-    private static func shouldIgnoreValidationFailure(
-        _ failure: PlaybackError,
-        statusCode: Int?,
-        url: URL
-    ) -> Bool {
-        guard isPlexDirectPlayPartURL(url) else { return false }
-
-        if let statusCode, (500...599).contains(statusCode) {
-            return true
-        }
-
-        switch failure {
-        case .serverUnreachable, .networkError:
-            return true
-        default:
-            return false
-        }
-    }
-
-    private static func isPlexDirectPlayPartURL(_ url: URL) -> Bool {
-        url.path.contains("/library/parts/")
     }
 
     private static func readPrefix(

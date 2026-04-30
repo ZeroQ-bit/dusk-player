@@ -14,7 +14,6 @@ final class UserPreferences {
     private enum Keys {
         static let maxResolution = "maxResolution"
         static let defaultSubtitleLanguage = "defaultSubtitleLanguage"
-        static let defaultSubtitleLanguages = "defaultSubtitleLanguages"
         static let subtitleForcedOnly = "subtitleForcedOnly"
         static let defaultAudioLanguage = "defaultAudioLanguage"
         static let continuousPlayEnabled = "continuousPlayEnabled"
@@ -31,39 +30,15 @@ final class UserPreferences {
         static let playerDebugOverlayEnabled = "playerDebugOverlayEnabled"
     }
 
-    nonisolated private static let maxSubtitleLanguagePreferenceCount = 5
-
     // MARK: - Properties
 
     var maxResolution: MaxResolution {
         didSet { UserDefaults.standard.set(maxResolution.rawValue, forKey: Keys.maxResolution) }
     }
 
-    /// Ordered ISO 639-1 language codes that Dusk tries for automatic subtitle selection.
-    var defaultSubtitleLanguages: [String] {
-        didSet {
-            let sanitizedLanguages = Self.sanitizedSubtitleLanguages(defaultSubtitleLanguages)
-            if sanitizedLanguages != defaultSubtitleLanguages {
-                defaultSubtitleLanguages = sanitizedLanguages
-                return
-            }
-
-            let defaults = UserDefaults.standard
-            defaults.set(sanitizedLanguages, forKey: Keys.defaultSubtitleLanguages)
-            defaults.removeObject(forKey: Keys.defaultSubtitleLanguage)
-        }
-    }
-
-    /// Backward-compatible accessor for the highest-priority subtitle language.
+    /// ISO 639-1 language code, or nil for "None" (no default subtitle).
     var defaultSubtitleLanguage: String? {
-        get { defaultSubtitleLanguages.first }
-        set {
-            if let newValue = newValue.flatMap(Self.normalizedLanguageCode(from:)) {
-                defaultSubtitleLanguages = [newValue]
-            } else {
-                defaultSubtitleLanguages = []
-            }
-        }
+        didSet { UserDefaults.standard.set(defaultSubtitleLanguage ?? "", forKey: Keys.defaultSubtitleLanguage) }
     }
 
     /// When enabled, automatic subtitle selection only picks forced tracks.
@@ -163,7 +138,7 @@ final class UserPreferences {
             maxResolution = .auto
         }
 
-        let defaultSubtitleLanguages = Self.storedSubtitleLanguages(defaults: defaults)
+        let defaultSubtitleLanguage = Self.storedSubtitleLanguage(defaults: defaults)
         let subtitleForcedOnly = defaults.object(forKey: Keys.subtitleForcedOnly) as? Bool ?? true
         let defaultAudioLanguage = defaults.string(forKey: Keys.defaultAudioLanguage) ?? "en"
         let continuousPlayEnabled = defaults.object(forKey: Keys.continuousPlayEnabled) as? Bool ?? true
@@ -205,7 +180,7 @@ final class UserPreferences {
         }
 
         self.maxResolution = maxResolution
-        self.defaultSubtitleLanguages = defaultSubtitleLanguages
+        self.defaultSubtitleLanguage = defaultSubtitleLanguage
         self.subtitleForcedOnly = subtitleForcedOnly
         self.defaultAudioLanguage = defaultAudioLanguage
         self.continuousPlayEnabled = continuousPlayEnabled
@@ -220,12 +195,6 @@ final class UserPreferences {
         self.forceVLCKit = forceVLCKit
         self.appearanceMode = appearanceMode
         self.playerDebugOverlayEnabled = playerDebugOverlayEnabled
-
-        if defaults.object(forKey: Keys.defaultSubtitleLanguages) == nil,
-           defaults.object(forKey: Keys.defaultSubtitleLanguage) != nil {
-            defaults.set(defaultSubtitleLanguages, forKey: Keys.defaultSubtitleLanguages)
-            defaults.removeObject(forKey: Keys.defaultSubtitleLanguage)
-        }
     }
 
     private static func storedSeekInterval(
@@ -256,46 +225,16 @@ final class UserPreferences {
         return value > 0 ? value : nil
     }
 
-    func subtitleLanguage(at index: Int) -> String? {
-        guard defaultSubtitleLanguages.indices.contains(index) else { return nil }
-        return defaultSubtitleLanguages[index]
-    }
-
-    func setSubtitleLanguage(_ languageCode: String?, at index: Int) {
-        guard (0..<Self.maxSubtitleLanguagePreferenceCount).contains(index) else { return }
-
-        var languages = defaultSubtitleLanguages
-
-        if let normalizedLanguageCode = languageCode.flatMap(Self.normalizedLanguageCode(from:)) {
-            if let existingIndex = languages.firstIndex(of: normalizedLanguageCode) {
-                languages.remove(at: existingIndex)
-            }
-
-            let insertionIndex = min(index, languages.count)
-            languages.insert(normalizedLanguageCode, at: insertionIndex)
-        } else if index < languages.count {
-            languages.remove(at: index)
+    private static func storedSubtitleLanguage(defaults: UserDefaults) -> String? {
+        guard defaults.object(forKey: Keys.defaultSubtitleLanguage) != nil else {
+            return systemPreferredSubtitleLanguageCode
         }
 
-        defaultSubtitleLanguages = languages
-    }
-
-    private static func storedSubtitleLanguages(defaults: UserDefaults) -> [String] {
-        if let storedValues = defaults.stringArray(forKey: Keys.defaultSubtitleLanguages) {
-            return sanitizedSubtitleLanguages(storedValues)
+        guard let storedValue = defaults.string(forKey: Keys.defaultSubtitleLanguage) else {
+            return nil
         }
 
-        if defaults.object(forKey: Keys.defaultSubtitleLanguage) != nil,
-           let storedValue = defaults.string(forKey: Keys.defaultSubtitleLanguage),
-           let normalizedLanguageCode = normalizedLanguageCode(from: storedValue) {
-            return [normalizedLanguageCode]
-        }
-
-        if let systemPreferredSubtitleLanguageCode {
-            return [systemPreferredSubtitleLanguageCode]
-        }
-
-        return []
+        return storedValue.isEmpty ? nil : normalizedLanguageCode(from: storedValue)
     }
 
     nonisolated static var systemPreferredSubtitleLanguageCode: String? {
@@ -309,9 +248,9 @@ final class UserPreferences {
         guard !trimmedIdentifier.isEmpty else { return nil }
 
         let normalizedIdentifier = trimmedIdentifier.replacingOccurrences(of: "-", with: "_")
-        let locale = Locale(identifier: normalizedIdentifier)
+        let components = Locale.components(fromIdentifier: normalizedIdentifier)
 
-        if let languageCode = locale.language.languageCode?.identifier, !languageCode.isEmpty {
+        if let languageCode = components[NSLocale.Key.languageCode.rawValue], !languageCode.isEmpty {
             return languageCode.lowercased()
         }
 
@@ -320,26 +259,6 @@ final class UserPreferences {
         }
 
         return nil
-    }
-
-    nonisolated private static func sanitizedSubtitleLanguages(_ identifiers: [String]) -> [String] {
-        var seenLanguageCodes: Set<String> = []
-        var sanitizedLanguages: [String] = []
-
-        for identifier in identifiers {
-            guard let normalizedLanguageCode = normalizedLanguageCode(from: identifier),
-                  seenLanguageCodes.insert(normalizedLanguageCode).inserted else {
-                continue
-            }
-
-            sanitizedLanguages.append(normalizedLanguageCode)
-
-            if sanitizedLanguages.count == maxSubtitleLanguagePreferenceCount {
-                break
-            }
-        }
-
-        return sanitizedLanguages
     }
 }
 

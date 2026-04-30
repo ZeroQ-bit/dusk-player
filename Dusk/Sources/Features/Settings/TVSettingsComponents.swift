@@ -151,19 +151,13 @@ struct TVSettingsActionRow: View {
             if isLoading {
                 ProgressView()
                     .tint(Color.duskAccent)
-            } else {
-                if let detail {
-                    Text(detail)
-                        .foregroundStyle(Color.duskTextSecondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
-
-                if showsChevron {
-                    Image(systemName: "chevron.right")
-                        .font(.headline)
-                        .foregroundStyle(Color.duskTextSecondary)
-                }
+            } else if let detail {
+                Text(detail)
+                    .foregroundStyle(Color.duskTextSecondary)
+            } else if showsChevron {
+                Image(systemName: "chevron.right")
+                    .font(.headline)
+                    .foregroundStyle(Color.duskTextSecondary)
             }
         }
         .frame(minHeight: 72)

@@ -6,20 +6,12 @@ struct SettingsIOSView: View {
     @Environment(UserPreferences.self) private var preferences
     @Environment(\.openURL) private var openURL
     @State private var presentedAccountURL: URL?
-    @State private var subtitlePreferencesPresented = false
     @Binding var path: NavigationPath
     let viewModel: SettingsViewModel
 
     var body: some View {
         SettingsContainer(path: $path, viewModel: viewModel) {
             settingsContent
-        }
-        .sheet(isPresented: $subtitlePreferencesPresented) {
-            SubtitleLanguagePreferencesSheet(
-                selectedLanguages: preferences.defaultSubtitleLanguages
-            ) { selectedLanguages in
-                preferences.defaultSubtitleLanguages = selectedLanguages
-            }
         }
         .sheet(isPresented: accountSheetPresented) {
             if let presentedAccountURL {
@@ -31,6 +23,7 @@ struct SettingsIOSView: View {
     @ViewBuilder
     private var settingsContent: some View {
         @Bindable var preferences = preferences
+        let subtitleLanguageBinding = SettingsSupport.subtitleLanguageBinding(preferences)
 
         List {
             Section {
@@ -41,26 +34,12 @@ struct SettingsIOSView: View {
                 }
                 .foregroundStyle(Color.duskTextPrimary)
 
-                Button {
-                    subtitlePreferencesPresented = true
-                } label: {
-                    HStack(spacing: 12) {
-                        Text("Subtitles")
-                            .foregroundStyle(Color.duskTextPrimary)
-
-                        Spacer()
-
-                        Text(SettingsSupport.subtitlePreferenceSummary(for: preferences.defaultSubtitleLanguages))
-                            .font(.subheadline)
-                            .foregroundStyle(Color.duskTextSecondary)
-                            .lineLimit(1)
-
-                        Image(systemName: "chevron.right")
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(Color.duskTextSecondary)
+                Picker("Subtitles", selection: subtitleLanguageBinding) {
+                    ForEach(SettingsSupport.subtitleLanguageOptions, id: \.self) { languageCode in
+                        Text(SettingsSupport.subtitleDisplayName(for: languageCode)).tag(languageCode)
                     }
                 }
-                .buttonStyle(.plain)
+                .foregroundStyle(Color.duskTextPrimary)
 
                 Toggle("Forced Only", isOn: $preferences.subtitleForcedOnly)
                     .foregroundStyle(Color.duskTextPrimary)

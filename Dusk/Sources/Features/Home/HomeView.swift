@@ -8,7 +8,6 @@ struct HomeView: View {
     @Environment(PlaybackCoordinator.self) private var playback
     @Binding var path: NavigationPath
     @State private var viewModel: HomeViewModel?
-    @State private var loadTask: Task<Void, Never>?
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -37,21 +36,18 @@ struct HomeView: View {
                 if viewModel == nil {
                     viewModel = HomeViewModel(plexService: plexService)
                 }
-                scheduleLoad()
+                await viewModel?.load(maxRecentlyAddedItems: recentlyAddedInlineItemLimit)
             }
             .onAppear {
-                guard viewModel != nil, !playback.showPlayer else { return }
-                scheduleLoad()
+                guard viewModel != nil else { return }
+                Task { await viewModel?.load(maxRecentlyAddedItems: recentlyAddedInlineItemLimit) }
             }
             .onChange(of: playback.showPlayer) { _, isShowing in
-                if isShowing {
-                    cancelLoad()
-                } else {
-                    scheduleLoad()
+                if !isShowing {
+                    Task { await viewModel?.load(maxRecentlyAddedItems: recentlyAddedInlineItemLimit) }
                 }
             }
             .refreshable {
-                cancelLoad()
                 await viewModel?.load(maxRecentlyAddedItems: recentlyAddedInlineItemLimit)
             }
             .duskAppNavigationDestinations()
@@ -88,23 +84,8 @@ struct HomeView: View {
     }
 
     private func play(_ item: PlexItem) {
-        cancelLoad()
         Task {
             await playback.play(ratingKey: item.ratingKey)
         }
-    }
-
-    private func scheduleLoad() {
-        cancelLoad()
-
-        guard let viewModel else { return }
-        loadTask = Task {
-            await viewModel.load(maxRecentlyAddedItems: recentlyAddedInlineItemLimit)
-        }
-    }
-
-    private func cancelLoad() {
-        loadTask?.cancel()
-        loadTask = nil
     }
 }

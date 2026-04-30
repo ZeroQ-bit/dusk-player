@@ -48,7 +48,7 @@ final class PlayerViewModel {
     let markers: [PlexMarker]
     var hasLoadedSource = false
     var sourcePart: PlexMediaPart?
-    var preferredSubtitleLanguages: [String] = []
+    var preferredSubtitleLanguage: String?
     var preferredAudioLanguage: String?
     var subtitleForcedOnly = false
     var autoSkipIntro = true
@@ -99,9 +99,7 @@ final class PlayerViewModel {
         part: PlexMediaPart?
     ) {
         sourcePart = part
-        preferredSubtitleLanguages = preferences.defaultSubtitleLanguages.compactMap {
-            Self.normalizedLanguageCode($0)
-        }
+        preferredSubtitleLanguage = Self.normalizedLanguageCode(preferences.defaultSubtitleLanguage)
         preferredAudioLanguage = Self.normalizedLanguageCode(preferences.defaultAudioLanguage)
         subtitleForcedOnly = preferences.subtitleForcedOnly
         autoSkipIntro = preferences.autoSkipIntro
